@@ -1,0 +1,524 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+} from 'react-native';
+import { QrCode, Calendar, MapPin, Search, Filter, Plus, ShoppingBag, X, Ticket } from 'lucide-react-native';
+import { useTheme } from '@/hooks/theme-context';
+import { useTickets } from '@/hooks/tickets-context';
+import { useAuth } from '@/hooks/auth-context';
+import { router } from 'expo-router';
+import { mockEvents } from '@/mocks/venues';
+
+export default function TicketsScreen() {
+  const { theme } = useTheme();
+  const { tickets } = useTickets();
+  const { user, requireAuth } = useAuth();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showBuyModal, setShowBuyModal] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'valid' | 'used' | 'refunded'>('all');
+
+  const handleTicketPress = (ticketId: string) => {
+    if (!requireAuth('view ticket details')) return;
+    router.push({
+      pathname: '/ticket/[id]' as any,
+      params: { id: ticketId },
+    });
+  };
+
+  const handleBuyTickets = () => {
+    if (!requireAuth('buy tickets')) return;
+    setShowBuyModal(true);
+  };
+
+  const handleEventPress = (eventId: string) => {
+    router.push({
+      pathname: '/checkout' as any,
+      params: { eventId },
+    });
+    setShowBuyModal(false);
+  };
+
+  const getFilteredTickets = () => {
+    let filtered = tickets;
+    
+    if (selectedFilter !== 'all') {
+      filtered = filtered.filter(ticket => ticket.status === selectedFilter);
+    }
+    
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(ticket => 
+        ticket.eventTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ticket.venueName.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    return filtered;
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'valid': return theme.colors.success;
+      case 'used': return theme.colors.gray[600];
+      case 'refunded': return theme.colors.error;
+      default: return theme.colors.gray[600];
+    }
+  };
+
+  const filteredTickets = getFilteredTickets();
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: theme.spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: theme.colors.text.primary,
+    },
+    buyButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+      backgroundColor: theme.colors.purple,
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+    },
+    buyButtonText: {
+      color: theme.colors.white,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    searchContainer: {
+      padding: theme.spacing.lg,
+      paddingBottom: theme.spacing.sm,
+    },
+    searchBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.card,
+      borderRadius: theme.borderRadius.md,
+      paddingHorizontal: theme.spacing.md,
+      height: 44,
+      gap: theme.spacing.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    searchInput: {
+      flex: 1,
+      color: theme.colors.text.primary,
+      fontSize: 16,
+    },
+    filterContainer: {
+      paddingHorizontal: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+    },
+    filterScrollView: {
+      flexDirection: 'row',
+      gap: theme.spacing.xs,
+    },
+    filterTab: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.borderRadius.full,
+      backgroundColor: theme.colors.card,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      minWidth: 60,
+      alignItems: 'center',
+    },
+    filterTabActive: {
+      backgroundColor: theme.colors.purple,
+      borderColor: theme.colors.purple,
+    },
+    filterTabText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.text.secondary,
+    },
+    filterTabTextActive: {
+      color: theme.colors.white,
+    },
+    content: {
+      flex: 1,
+    },
+    ticketList: {
+      padding: theme.spacing.lg,
+    },
+    ticketCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    ticketHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: theme.spacing.sm,
+    },
+    eventTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.colors.text.primary,
+      flex: 1,
+      marginRight: theme.spacing.sm,
+    },
+    statusBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: theme.borderRadius.sm,
+    },
+    statusText: {
+      color: theme.colors.white,
+      fontSize: 10,
+      fontWeight: '700',
+    },
+    venueName: {
+      fontSize: 16,
+      color: theme.colors.text.secondary,
+      marginBottom: theme.spacing.md,
+    },
+    ticketInfo: {
+      gap: theme.spacing.sm,
+      marginBottom: theme.spacing.md,
+    },
+    infoItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    infoText: {
+      fontSize: 14,
+      color: theme.colors.text.secondary,
+    },
+    ticketFooter: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    productName: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.purple,
+    },
+    emptyState: {
+      alignItems: 'center',
+      paddingVertical: theme.spacing.xxl,
+    },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.colors.text.primary,
+      marginTop: theme.spacing.lg,
+      marginBottom: theme.spacing.sm,
+    },
+    emptySubtitle: {
+      fontSize: 16,
+      color: theme.colors.text.secondary,
+      textAlign: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    emptyButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+      backgroundColor: theme.colors.purple,
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      borderRadius: theme.borderRadius.md,
+    },
+    emptyButtonText: {
+      color: theme.colors.white,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      justifyContent: 'flex-end',
+    },
+    modalContent: {
+      backgroundColor: theme.colors.card,
+      borderTopLeftRadius: theme.borderRadius.lg,
+      borderTopRightRadius: theme.borderRadius.lg,
+      maxHeight: '80%',
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: theme.spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.colors.text.primary,
+    },
+    modalClose: {
+      padding: theme.spacing.sm,
+    },
+    modalBody: {
+      padding: theme.spacing.lg,
+    },
+    eventCard: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: theme.colors.background,
+      padding: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+      marginBottom: theme.spacing.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    eventInfo: {
+      flex: 1,
+    },
+    modalEventTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.text.primary,
+      marginBottom: 4,
+    },
+    eventVenue: {
+      fontSize: 14,
+      color: theme.colors.text.secondary,
+      marginBottom: 4,
+    },
+    eventDate: {
+      fontSize: 12,
+      color: theme.colors.text.tertiary,
+    },
+    eventPrice: {
+      alignItems: 'flex-end',
+    },
+    priceText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.purple,
+    },
+    unauthenticatedContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: theme.colors.background,
+    },
+    unauthenticatedContent: {
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.xl,
+    },
+    unauthenticatedTitle: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: theme.colors.text.primary,
+      marginTop: theme.spacing.lg,
+      marginBottom: theme.spacing.sm,
+      textAlign: 'center',
+    },
+    unauthenticatedSubtitle: {
+      fontSize: 16,
+      color: theme.colors.text.secondary,
+      textAlign: 'center',
+      marginBottom: theme.spacing.xl,
+      lineHeight: 24,
+    },
+    signInButton: {
+      backgroundColor: theme.colors.purple,
+      paddingHorizontal: theme.spacing.xl,
+      paddingVertical: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+    },
+    signInButtonText: {
+      color: theme.colors.white,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });
+
+  // If user is not authenticated, show sign-in prompt
+  if (!user) {
+    return (
+      <View style={styles.unauthenticatedContainer}>
+        <View style={styles.unauthenticatedContent}>
+          <Ticket size={64} color={theme.colors.text.tertiary} />
+          <Text style={styles.unauthenticatedTitle}>Sign In Required</Text>
+          <Text style={styles.unauthenticatedSubtitle}>
+            Sign in to view your tickets and purchase new ones
+          </Text>
+          <TouchableOpacity 
+            style={styles.signInButton}
+            onPress={() => requireAuth('view your tickets')}
+          >
+            <Text style={styles.signInButtonText}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.title}>My Tickets</Text>
+        <TouchableOpacity style={styles.buyButton} onPress={handleBuyTickets}>
+          <Plus size={16} color={theme.colors.white} />
+          <Text style={styles.buyButtonText}>Buy Tickets</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Search and Filter */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Search size={20} color={theme.colors.text.tertiary} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search tickets..."
+            placeholderTextColor={theme.colors.text.tertiary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+      </View>
+
+      {/* Filter Tabs */}
+      <View style={styles.filterContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScrollView}
+        >
+          {[{ key: 'all', label: 'All' }, { key: 'valid', label: 'Valid' }, { key: 'used', label: 'Used' }, { key: 'refunded', label: 'Refunded' }].map((filter) => (
+            <TouchableOpacity
+              key={filter.key}
+              style={[styles.filterTab, selectedFilter === filter.key && styles.filterTabActive]}
+              onPress={() => setSelectedFilter(filter.key as any)}
+            >
+              <Text style={[styles.filterTabText, selectedFilter === filter.key && styles.filterTabTextActive]}>
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.ticketList}>
+          {filteredTickets.map((ticket) => (
+            <TouchableOpacity
+              key={ticket.id}
+              style={styles.ticketCard}
+              onPress={() => handleTicketPress(ticket.id)}
+            >
+              <View style={styles.ticketHeader}>
+                <Text style={styles.eventTitle}>{ticket.eventTitle}</Text>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(ticket.status) }]}>
+                  <Text style={styles.statusText}>{ticket.status.toUpperCase()}</Text>
+                </View>
+              </View>
+              
+              <Text style={styles.venueName}>{ticket.venueName}</Text>
+              
+              <View style={styles.ticketInfo}>
+                <View style={styles.infoItem}>
+                  <Calendar size={16} color={theme.colors.text.secondary} />
+                  <Text style={styles.infoText}>
+                    {new Date(ticket.eventDate).toLocaleDateString()}
+                  </Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MapPin size={16} color={theme.colors.text.secondary} />
+                  <Text style={styles.infoText}>{ticket.venueAddress}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.ticketFooter}>
+                <Text style={styles.productName}>{ticket.productName}</Text>
+                <QrCode size={24} color={theme.colors.purple} />
+              </View>
+            </TouchableOpacity>
+          ))}
+          
+          {filteredTickets.length === 0 && tickets.length > 0 && (
+            <View style={styles.emptyState}>
+              <Filter size={64} color={theme.colors.text.tertiary} />
+              <Text style={styles.emptyTitle}>No tickets match your search</Text>
+              <Text style={styles.emptySubtitle}>
+                Try adjusting your search or filter criteria
+              </Text>
+            </View>
+          )}
+          
+          {tickets.length === 0 && (
+            <View style={styles.emptyState}>
+              <QrCode size={64} color={theme.colors.text.tertiary} />
+              <Text style={styles.emptyTitle}>No Tickets Yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Your purchased tickets will appear here
+              </Text>
+              <TouchableOpacity style={styles.emptyButton} onPress={handleBuyTickets}>
+                <ShoppingBag size={16} color={theme.colors.white} />
+                <Text style={styles.emptyButtonText}>Browse Events</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Buy Tickets Modal */}
+      <Modal visible={showBuyModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Available Events</Text>
+              <TouchableOpacity style={styles.modalClose} onPress={() => setShowBuyModal(false)}>
+                <X size={24} color={theme.colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalBody}>
+              {mockEvents.map((event) => (
+                <TouchableOpacity
+                  key={event.id}
+                  style={styles.eventCard}
+                  onPress={() => handleEventPress(event.id)}
+                >
+                  <View style={styles.eventInfo}>
+                    <Text style={styles.modalEventTitle}>{event.title}</Text>
+                    <Text style={styles.eventVenue}>{event.venueName}</Text>
+                    <Text style={styles.eventDate}>
+                      {new Date(event.startAt).toLocaleDateString()} • {new Date(event.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                  <View style={styles.eventPrice}>
+                    <Text style={styles.priceText}>From ${Math.min(...event.products.map(p => p.price))}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
