@@ -24,15 +24,16 @@ const styles = StyleSheet.create({
 });
 
 export default function BusinessTabLayout() {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, isBusiness, isAdmin } = useAuth();
+  const canAccess = isBusiness || isAdmin;
 
   useEffect(() => {
-    if (!isLoading && (!isAuthenticated || user?.role !== 'business')) {
+    if (!isLoading && (!isAuthenticated || !canAccess)) {
       router.replace('/(auth)/signin');
     }
-  }, [isAuthenticated, isLoading, user]);
+  }, [isAuthenticated, isLoading, canAccess]);
 
-  if (!isAuthenticated || user?.role !== 'business') {
+  if (!isAuthenticated || !canAccess) {
     return null;
   }
 

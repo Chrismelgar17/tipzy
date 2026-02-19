@@ -4,40 +4,28 @@ import { cors } from "hono/cors";
 import { appRouter } from "./trpc/app-router";
 import { createContext } from "./trpc/create-context";
 import customerRoutes from "./routes/customer";
+import businessRoutes from "./routes/business";
+import adminRoutes from "./routes/admin";
 
-// basePath('/api') so routes are relative to /api.
-// Expo Router's app/api/[...slug]+api.ts forwards full URLs here,
-// e.g. /api/customer/login -> Hono strips /api -> routes /customer/login
 const app = new Hono().basePath("/api");
 
-// Enable CORS — allow the Expo web app (any origin) and the rork tunnel
 app.use("*", cors({
-  origin: (origin) => {
-    // Allow all origins in development (Metro localhost, rork tunnel, etc.)
-    return origin ?? "*";
-  },
+  origin: (origin) => origin ?? "*",
   allowHeaders: ["Content-Type", "Authorization"],
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   exposeHeaders: ["Content-Length"],
   credentials: true,
 }));
 
-// Customer auth routes: /api/customer/register  /api/customer/login  /api/customer/me
+// Auth routes
 app.route("/customer", customerRoutes);
+app.route("/business", businessRoutes);
+app.route("/admin", adminRoutes);
 
-// tRPC: /api/trpc/*
-app.use(
-  "/trpc/*",
-  trpcServer({
-    endpoint: "/api/trpc",
-    router: appRouter,
-    createContext,
-  })
-);
+// tRPC
+app.use("/trpc/*", trpcServer({ endpoint: "/api/trpc", router: appRouter, createContext }));
 
-// Health check: GET /api
-app.get("/", (c) => {
-  return c.json({ status: "ok", message: "Tipzy API is running" });
-});
+// Health check
+app.get("/", (c) => c.json({ status: "ok", message: "Tipzy API is running", version: "2.0" }));
 
 export default app;

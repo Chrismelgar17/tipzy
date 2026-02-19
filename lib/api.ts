@@ -48,11 +48,19 @@ api.interceptors.response.use(
       const { status, data } = error.response;
       console.error(`[API] ← ${status} ${originalRequest?.url}`, data);
 
-      // Token expired / invalid – clear stored credentials
+      // Token expired – try a silent refresh then retry once
       if (status === 401 && !originalRequest._retry) {
         originalRequest._retry = true;
-        await AsyncStorage.multiRemove(['authToken', 'userData']);
-        console.warn('[Auth] Token expired or invalid. User must log in again.');
+        try {
+          const { authService } = await import('./auth.service');
+          const { token } = await authService.refreshTokens();
+          originalRequest.headers = originalRequest.headers ?? {};
+          originalRequest.headers['Authorization'] = `Bearer ${token}`;
+          return api(originalRequest);
+        } catch {
+          console.warn('[Auth] Refresh failed – clearing session');
+          await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userData']);
+        }
       }
 
       if (status === 403) {

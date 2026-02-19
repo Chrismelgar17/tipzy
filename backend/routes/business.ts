@@ -1,11 +1,10 @@
-﻿/**
- * Customer auth routes
- * POST /api/customer/register
- * POST /api/customer/login
- * POST /api/customer/refresh
- * GET  /api/customer/me
- * POST /api/customer/change-password
- * DELETE /api/customer/account
+/**
+ * Business auth routes
+ * POST /api/business/register
+ * POST /api/business/login
+ * POST /api/business/refresh
+ * GET  /api/business/me
+ * POST /api/business/change-password
  */
 import { Hono } from "hono";
 import {
@@ -19,15 +18,17 @@ import {
 import { users, refreshTokens } from "../store";
 import type { StoredUser } from "../store";
 
-const customer = new Hono();
+const business = new Hono();
 
-// Register
-customer.post("/register", async (c) => {
-  let body: { name?: string; email?: string; password?: string; age?: number; phone?: string };
+// Register business
+business.post("/register", async (c) => {
+  let body: { name?: string; email?: string; password?: string; businessName?: string; businessCategory?: string; phone?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
 
-  const { name, email, password, age, phone } = body;
-  if (!name || !email || !password) return c.json({ error: "name, email and password are required" }, 400);
+  const { name, email, password, businessName, businessCategory, phone } = body;
+  if (!name || !email || !password || !businessName) {
+    return c.json({ error: "name, email, password and businessName are required" }, 400);
+  }
   if (password.length < 6) return c.json({ error: "Password must be at least 6 characters" }, 400);
 
   const normalised = email.trim().toLowerCase();
@@ -35,27 +36,31 @@ customer.post("/register", async (c) => {
     return c.json({ error: "Email already exists" }, 409);
   }
 
-  const id = `cust_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const id = `biz_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const passwordHash = await hashPassword(password);
   const createdAt = new Date().toISOString();
 
-  const user: StoredUser = { id, email: normalised, name: name.trim(), passwordHash, age, phone, role: "customer", createdAt };
+  const user: StoredUser = {
+    id, email: normalised, name: name.trim(), passwordHash,
+    role: "business", phone, businessName, businessCategory,
+    businessStatus: "pending", createdAt,
+  };
   users.set(id, user);
 
-  const accessToken = await signAccessToken(id, user.email, "customer");
-  const refreshToken = await signRefreshToken(id, "customer");
+  const accessToken = await signAccessToken(id, user.email, "business");
+  const refreshToken = await signRefreshToken(id, "business");
   refreshTokens.set(refreshToken, id);
 
   return c.json({
-    message: "Customer registered successfully",
-    user: { id, email: user.email, name: user.name, age, role: "customer", createdAt },
+    message: "Business registered successfully. Account pending approval.",
+    user: { id, email: user.email, name: user.name, businessName, businessCategory, businessStatus: "pending", role: "business", createdAt },
     token: accessToken,
     refreshToken,
   }, 201);
 });
 
-// Login
-customer.post("/login", async (c) => {
+// Login business
+business.post("/login", async (c) => {
   let body: { email?: string; password?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
 
@@ -66,22 +71,26 @@ customer.post("/login", async (c) => {
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return c.json({ error: "Invalid email or password" }, 401);
   }
-  if (user.role !== "customer") return c.json({ error: "Not a customer account" }, 403);
+  if (user.role !== "business") return c.json({ error: "Not a business account" }, 403);
 
-  const accessToken = await signAccessToken(user.id, user.email, "customer");
-  const refreshToken = await signRefreshToken(user.id, "customer");
+  const accessToken = await signAccessToken(user.id, user.email, "business");
+  const refreshToken = await signRefreshToken(user.id, "business");
   refreshTokens.set(refreshToken, user.id);
 
   return c.json({
     message: "Login successful",
-    user: { id: user.id, email: user.email, name: user.name, age: user.age, role: "customer", createdAt: user.createdAt },
+    user: {
+      id: user.id, email: user.email, name: user.name,
+      businessName: user.businessName, businessStatus: user.businessStatus,
+      role: "business", createdAt: user.createdAt,
+    },
     token: accessToken,
     refreshToken,
   });
 });
 
 // Refresh token
-customer.post("/refresh", async (c) => {
+business.post("/refresh", async (c) => {
   let body: { refreshToken?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
 
@@ -108,15 +117,19 @@ customer.post("/refresh", async (c) => {
 });
 
 // Me
-customer.get("/me", requireAuth, (c) => {
+business.get("/me", requireAuth, (c) => {
   const userId = c.get("userId");
   const user = users.get(userId);
   if (!user) return c.json({ error: "User not found" }, 404);
-  return c.json({ id: user.id, name: user.name, email: user.email, age: user.age, phone: user.phone, role: user.role, createdAt: user.createdAt });
+  return c.json({
+    id: user.id, name: user.name, email: user.email, phone: user.phone,
+    businessName: user.businessName, businessCategory: user.businessCategory,
+    businessStatus: user.businessStatus, role: user.role, createdAt: user.createdAt,
+  });
 });
 
 // Change password
-customer.post("/change-password", requireAuth, async (c) => {
+business.post("/change-password", requireAuth, async (c) => {
   let body: { currentPassword?: string; newPassword?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
 
@@ -137,14 +150,4 @@ customer.post("/change-password", requireAuth, async (c) => {
   return c.json({ message: "Password updated successfully" });
 });
 
-// Delete account
-customer.delete("/account", requireAuth, (c) => {
-  const userId = c.get("userId");
-  users.delete(userId);
-  for (const [token, uid] of refreshTokens.entries()) {
-    if (uid === userId) refreshTokens.delete(token);
-  }
-  return c.json({ message: "Account deleted successfully" });
-});
-
-export default customer;
+export default business;

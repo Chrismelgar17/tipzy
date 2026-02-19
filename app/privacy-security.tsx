@@ -14,8 +14,10 @@ import { Stack } from 'expo-router';
 import { Shield, Lock, Eye, EyeOff, Trash2, Database } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { PrivacySettings } from '@/types/models';
+import { useAuth } from '@/hooks/auth-context';
 
 export default function PrivacySecurityScreen() {
+  const { changePassword, deleteAccount } = useAuth();
   const [privacySettings, setPrivacySettings] = useState<PrivacySettings>({
     twoFactorEnabled: false,
     dataSharing: true,
@@ -57,10 +59,13 @@ export default function PrivacySecurityScreen() {
       return;
     }
 
-    // Here you would typically validate current password and update
-    Alert.alert('Success', 'Password changed successfully');
-    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    setShowPasswordModal(false);
+    changePassword(passwordForm.currentPassword, passwordForm.newPassword)
+      .then(() => {
+        Alert.alert('Success', 'Password changed successfully');
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        setShowPasswordModal(false);
+      })
+      .catch((err: any) => Alert.alert('Error', err?.message ?? 'Failed to change password'));
   };
 
   const handleDeleteAccount = () => {
@@ -73,8 +78,8 @@ export default function PrivacySecurityScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            // Here you would typically handle account deletion
-            Alert.alert('Account Deleted', 'Your account has been permanently deleted.');
+            deleteAccount()
+              .catch((err: any) => Alert.alert('Error', err?.message ?? 'Failed to delete account'));
             setShowDeleteModal(false);
           },
         },

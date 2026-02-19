@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEYS = {
   AUTH_TOKEN: 'authToken',
+  REFRESH_TOKEN: 'refreshToken',
   USER_DATA: 'userData',
 } as const;
 
@@ -59,10 +60,35 @@ export const secureStorage = {
     }
   },
 
+  /** Persist the JWT refresh token */
+  saveRefreshToken: async (token: string | null | undefined): Promise<boolean> => {
+    if (token == null || token === '') {
+      console.warn('[secureStorage] saveRefreshToken called with empty value – skipping');
+      return false;
+    }
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, token);
+      return true;
+    } catch (error) {
+      console.error('Error saving refresh token:', error);
+      return false;
+    }
+  },
+
+  /** Retrieve the stored JWT refresh token */
+  getRefreshToken: async (): Promise<string | null> => {
+    try {
+      return await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+    } catch (error) {
+      console.error('Error getting refresh token:', error);
+      return null;
+    }
+  },
+
   /** Remove both the token and user data (e.g. on logout) */
   clearAuthData: async (): Promise<boolean> => {
     try {
-      await AsyncStorage.multiRemove([STORAGE_KEYS.AUTH_TOKEN, STORAGE_KEYS.USER_DATA]);
+      await AsyncStorage.multiRemove([STORAGE_KEYS.AUTH_TOKEN, STORAGE_KEYS.REFRESH_TOKEN, STORAGE_KEYS.USER_DATA]);
       return true;
     } catch (error) {
       console.error('Error clearing auth data:', error);
@@ -162,6 +188,9 @@ export const clearAllAppData = async (): Promise<void> => {
     const keys = await AsyncStorage.getAllKeys();
     const appKeys = keys.filter(key => 
       key.startsWith('user') || 
+      key === 'authToken' ||
+      key === 'refreshToken' ||
+      key === 'userData' ||
       key.startsWith('tickets_') || 
       key.startsWith('orders_') || 
       key.startsWith('messages_') || 
