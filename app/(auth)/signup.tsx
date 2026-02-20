@@ -176,10 +176,7 @@ export default function SignUpScreen() {
       if (dobDate) {
         await signUp(email.trim().toLowerCase(), password, name.trim(), dobDate, `${countryCode}${phone.replace(/\D/g, '')}`);
       }
-      setStep('complete');
-      setTimeout(() => {
-        router.replace('/(tabs)/home');
-      }, 1500);
+      setStep('verify-email');
     } catch (error: any) {
       Alert.alert('Sign Up Failed', error.message || 'Failed to create account. Please try again.');
     } finally {

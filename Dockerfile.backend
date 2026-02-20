@@ -1,0 +1,24 @@
+# Backend image for Tipzy API
+# Uses Bun runtime to execute the Hono server directly (TypeScript supported by Bun)
+FROM oven/bun:1.1
+
+WORKDIR /app
+
+# Install deps first (better layer caching). Ignore scripts to avoid native builds from Expo deps.
+COPY package.json bun.lockb* ./
+# If bun.lockb is missing, fall back to npm-style install to avoid failures
+RUN if [ -f bun.lockb ] ; then \
+			BUN_INSTALL_IGNORE_SCRIPTS=1 bun install --production ; \
+		else \
+			BUN_INSTALL_IGNORE_SCRIPTS=1 bun install --production --no-save ; \
+		fi
+
+# Copy source
+COPY . .
+
+ENV PORT=3001
+ENV HOST=0.0.0.0
+
+EXPOSE 3001
+
+CMD ["bun", "backend/server.ts"]

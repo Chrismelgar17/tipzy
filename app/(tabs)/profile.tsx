@@ -30,7 +30,7 @@ import * as Haptics from 'expo-haptics';
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
-  const { user, signOut, requireAuth } = useAuth();
+  const { user, signOut, requireAuth, emailVerified, resendVerification, pendingVerificationEmail } = useAuth();
   const insets = useSafeAreaInsets();
 
   const styles = StyleSheet.create({
@@ -207,6 +207,30 @@ export default function ProfileScreen() {
       fontWeight: '600',
     },
   });
+
+  if (user && !emailVerified) {
+    const email = pendingVerificationEmail || user.email;
+    return (
+      <View style={[styles.container, { padding: theme.spacing.lg }]}> 
+        <Text style={styles.unauthenticatedTitle}>Verify your email</Text>
+        <Text style={styles.unauthenticatedSubtitle}>
+          We sent a verification code to {email}. Verify your account to access your profile.
+        </Text>
+        <TouchableOpacity
+          style={{ backgroundColor: theme.colors.purple, padding: theme.spacing.md, borderRadius: theme.borderRadius.md }}
+          onPress={() => router.replace({ pathname: '/(auth)/verify-email', params: { email } } as any)}
+        >
+          <Text style={{ color: theme.colors.white, fontWeight: '600', textAlign: 'center' }}>Enter verification code</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ marginTop: theme.spacing.md }}
+          onPress={() => resendVerification().catch(() => Alert.alert('Error', 'Could not resend email'))}
+        >
+          <Text style={{ color: theme.colors.cyan, textAlign: 'center' }}>Resend verification email</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   // If user is not authenticated, show sign-in prompt
   if (!user) {

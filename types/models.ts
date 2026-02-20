@@ -10,6 +10,7 @@ export interface User {
   hasCompletedOnboarding?: boolean;
   phone?: string;
   bio?: string;
+  emailVerified?: boolean;
 }
 
 export interface Venue {

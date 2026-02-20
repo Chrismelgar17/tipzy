@@ -78,7 +78,6 @@ export default function AuthScreen() {
     setIsLoading(true);
     try {
       await signIn(email, password);
-      router.replace('/(tabs)/home');
     } catch (error: any) {
       const message = error?.message || 'Invalid credentials';
       if (message.toLowerCase().includes('network') || message.toLowerCase().includes('connection')) {

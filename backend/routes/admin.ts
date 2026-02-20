@@ -1,5 +1,5 @@
 /**
- * Admin routes (requires admin role)
+ * Admin routes (Postgres-backed)
  * GET  /api/admin/users          – list all users
  * PATCH /api/admin/users/:id/role – promote/demote a user's role
  * PATCH /api/admin/business/:id/approve – approve a business
@@ -10,8 +10,7 @@
  */
 import { Hono } from "hono";
 import { requireAuth, requireRole, hashPassword } from "../auth";
-import { users, refreshTokens } from "../store";
-import type { Role } from "../store";
+import { query, type DbUser } from "../db";
 
 const admin = new Hono();
 
@@ -19,11 +18,18 @@ const admin = new Hono();
 admin.use("*", requireAuth, requireRole("admin"));
 
 // List all users
-admin.get("/users", (c) => {
-  const list = [...users.values()].map((u) => ({
-    id: u.id, email: u.email, name: u.name, role: u.role,
-    businessName: u.businessName, businessStatus: u.businessStatus,
-    createdAt: u.createdAt,
+admin.get("/users", async (c) => {
+  const res = await query<DbUser>(
+    "SELECT id, email, name, role, business_name, business_status, created_at FROM users ORDER BY created_at DESC",
+  );
+  const list = res.rows.map((u) => ({
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    businessName: u.business_name,
+    businessStatus: u.business_status,
+    createdAt: u.created_at,
   }));
   return c.json({ users: list, total: list.length });
 });
@@ -38,23 +44,24 @@ admin.patch("/users/:id/role", async (c) => {
     return c.json({ error: "role must be one of: customer, business, admin" }, 400);
   }
 
-  const user = users.get(c.req.param("id"));
-  if (!user) return c.json({ error: "User not found" }, 404);
+  const id = c.req.param("id");
+  const res = await query<DbUser>("SELECT id FROM users WHERE id = $1", [id]);
+  if (!res.rowCount) return c.json({ error: "User not found" }, 404);
 
-  user.role = role as Role;
-  users.set(user.id, user);
-  return c.json({ message: `Role updated to ${role}`, user: { id: user.id, email: user.email, role: user.role } });
+  await query("UPDATE users SET role = $1 WHERE id = $2", [role, id]);
+  return c.json({ message: `Role updated to ${role}`, user: { id, role } });
 });
 
 // Approve a business account
-admin.patch("/business/:id/approve", (c) => {
-  const user = users.get(c.req.param("id"));
+admin.patch("/business/:id/approve", async (c) => {
+  const id = c.req.param("id");
+  const res = await query<DbUser>("SELECT role FROM users WHERE id = $1", [id]);
+  const user = res.rows[0];
   if (!user) return c.json({ error: "User not found" }, 404);
   if (user.role !== "business") return c.json({ error: "Not a business account" }, 400);
 
-  user.businessStatus = "approved";
-  users.set(user.id, user);
-  return c.json({ message: "Business approved", user: { id: user.id, businessName: user.businessName, businessStatus: "approved" } });
+  await query("UPDATE users SET business_status = 'approved' WHERE id = $1", [id]);
+  return c.json({ message: "Business approved", user: { id, businessStatus: "approved" } });
 });
 
 // Reject a business account
@@ -62,24 +69,24 @@ admin.patch("/business/:id/reject", async (c) => {
   let body: { reason?: string };
   try { body = await c.req.json(); } catch { body = {}; }
 
-  const user = users.get(c.req.param("id"));
+  const id = c.req.param("id");
+  const res = await query<DbUser>("SELECT role FROM users WHERE id = $1", [id]);
+  const user = res.rows[0];
   if (!user) return c.json({ error: "User not found" }, 404);
   if (user.role !== "business") return c.json({ error: "Not a business account" }, 400);
 
-  user.businessStatus = "rejected";
-  users.set(user.id, user);
+  await query("UPDATE users SET business_status = 'rejected' WHERE id = $1", [id]);
   return c.json({ message: "Business rejected", reason: body.reason ?? null });
 });
 
 // Delete any user (admin can delete any account)
-admin.delete("/users/:id", (c) => {
+admin.delete("/users/:id", async (c) => {
   const id = c.req.param("id");
-  if (!users.has(id)) return c.json({ error: "User not found" }, 404);
+  const res = await query<DbUser>("SELECT id FROM users WHERE id = $1", [id]);
+  if (!res.rowCount) return c.json({ error: "User not found" }, 404);
 
-  users.delete(id);
-  for (const [token, uid] of refreshTokens.entries()) {
-    if (uid === id) refreshTokens.delete(token);
-  }
+  await query("DELETE FROM refresh_tokens WHERE user_id = $1", [id]);
+  await query("DELETE FROM users WHERE id = $1", [id]);
   return c.json({ message: "User deleted" });
 });
 
@@ -91,11 +98,12 @@ admin.patch("/users/:id/reset-password", async (c) => {
   const { newPassword } = body;
   if (!newPassword || newPassword.length < 6) return c.json({ error: "newPassword must be at least 6 characters" }, 400);
 
-  const user = users.get(c.req.param("id"));
-  if (!user) return c.json({ error: "User not found" }, 404);
+  const id = c.req.param("id");
+  const res = await query<DbUser>("SELECT id FROM users WHERE id = $1", [id]);
+  if (!res.rowCount) return c.json({ error: "User not found" }, 404);
 
-  user.passwordHash = await hashPassword(newPassword);
-  users.set(user.id, user);
+  const newHash = await hashPassword(newPassword);
+  await query("UPDATE users SET password_hash = $1 WHERE id = $2", [newHash, id]);
   return c.json({ message: "Password reset successfully" });
 });
 

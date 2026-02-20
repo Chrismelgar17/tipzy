@@ -9,6 +9,10 @@ import { authService, type AuthUser, type UserRole } from '@/lib/auth.service';
 interface AuthState {
   user: User | null;
   role: UserRole | null;
+  emailVerified: boolean;
+  pendingVerificationEmail: string | null;
+  verificationToken: string | null;
+  verificationPreviewUrl: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -24,6 +28,8 @@ interface AuthState {
   toggleFavorite: (venueId: string) => void;
   forgotPassword: (email: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  verifyEmail: (token: string) => Promise<void>;
+  resendVerification: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   hasCompletedOnboarding: boolean;
   completeOnboarding: () => Promise<void>;
@@ -43,7 +49,7 @@ function routeForRole(role: UserRole | undefined) {
   switch (role) {
     case 'admin':    return '/admin';
     case 'business': return '/(business-tabs)/dashboard';
-    default:         return '/(tabs)/home';
+    default:         return '/(tabs)/profile';
   }
 }
 
@@ -58,6 +64,7 @@ function toAppUser(apiUser: AuthUser, extra?: Partial<User>): User {
     favorites: [],
     createdAt: new Date(apiUser.createdAt),
     role: apiUser.role === 'admin' ? 'admin' : apiUser.role === 'business' ? 'business' : 'user',
+    emailVerified: apiUser.emailVerified ?? false,
     hasCompletedOnboarding: false,
     ...extra,
   };
@@ -68,6 +75,9 @@ function toAppUser(apiUser: AuthUser, extra?: Partial<User>): User {
 export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
+  const [verificationToken, setVerificationToken] = useState<string | null>(null);
+  const [verificationPreviewUrl, setVerificationPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [signInPrompt, setSignInPrompt] = useState('Sign in to continue');
@@ -93,8 +103,20 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
           await authService.refreshTokens();
           const stored = await authService.getStoredUser();
           if (stored) {
-            setUser(toAppUser(stored));
+            let mapped = toAppUser(stored);
+            // If emailVerified is missing/false, fetch fresh profile to avoid stale verification state
+            if (!mapped.emailVerified) {
+              try {
+                const fresh = await authService.getProfile();
+                mapped = toAppUser(fresh);
+                await secureStorage.saveUserData(fresh);
+              } catch {
+                // If profile fails, fall back to stored
+              }
+            }
+            setUser(mapped);
             setRole(stored.role);
+            if (!mapped.emailVerified) setPendingVerificationEmail(mapped.email);
             return;
           }
         } catch {
@@ -117,6 +139,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
         setUser(parsed);
         const storedRole = await secureStorage.getUserData<AuthUser>();
         setRole(storedRole?.role ?? null);
+        if (!parsed.emailVerified) setPendingVerificationEmail(parsed.email);
       } else if (raw && raw.trim()) {
         await clearCorruptedData('user');
       }
@@ -165,12 +188,39 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   //  Auth actions 
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const response = await authService.login(email, password);
-    const appUser = toAppUser(response.user);
-    setUser(appUser);
-    setRole(response.user.role);
-    await AsyncStorage.setItem('user', JSON.stringify(appUser));
-    router.replace(routeForRole(response.user.role) as any);
+    try {
+      const response = await authService.login(email, password);
+      let appUser = toAppUser(response.user);
+
+      // If backend says unverified, double-check with profile to avoid stale state
+      if (!appUser.emailVerified) {
+        try {
+          const fresh = await authService.getProfile();
+          appUser = toAppUser(fresh);
+        } catch {
+          // ignore fetch errors; fall back to login payload
+        }
+      }
+
+      setUser(appUser);
+      setRole(appUser.role === 'business' ? 'business' : appUser.role === 'admin' ? 'admin' : 'customer');
+      await AsyncStorage.setItem('user', JSON.stringify(appUser));
+
+      if (!appUser.emailVerified) {
+        setPendingVerificationEmail(appUser.email);
+        router.replace({ pathname: '/(auth)/verify-email', params: { email: appUser.email } } as any);
+        return;
+      }
+      router.replace(routeForRole(appUser.role as UserRole) as any);
+    } catch (error: any) {
+      const message = error?.message?.toLowerCase?.() || '';
+      if (message.includes('verify')) {
+        setPendingVerificationEmail(email);
+        router.replace({ pathname: '/(auth)/verify-email', params: { email } } as any);
+        return;
+      }
+      throw error;
+    }
   }, []);
 
   const signInBusiness = useCallback(async (email: string, password: string) => {
@@ -186,9 +236,19 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     const age = new Date().getFullYear() - dob.getFullYear();
     const response = await authService.register(name, email, password, age, phone);
     const appUser = toAppUser(response.user, { dob, phone });
+    await secureStorage.saveToken(response.token);
+    await secureStorage.saveRefreshToken(response.refreshToken);
+    await secureStorage.saveUserData(response.user);
     setUser(appUser);
     setRole(response.user.role);
     await AsyncStorage.setItem('user', JSON.stringify(appUser));
+    if (!appUser.emailVerified) {
+      setPendingVerificationEmail(appUser.email);
+      setVerificationToken(response.verificationToken ?? null);
+      setVerificationPreviewUrl(response.mailPreviewUrl ?? null);
+      router.replace({ pathname: '/(auth)/verify-email', params: { email: appUser.email } } as any);
+      return;
+    }
     router.replace(routeForRole(response.user.role) as any);
   }, []);
 
@@ -198,9 +258,19 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   ) => {
     const response = await authService.registerBusiness(name, email, password, businessName, businessCategory, phone);
     const appUser = toAppUser(response.user, { phone });
+    await secureStorage.saveToken(response.token);
+    await secureStorage.saveRefreshToken(response.refreshToken);
+    await secureStorage.saveUserData(response.user);
     setUser(appUser);
     setRole(response.user.role);
     await AsyncStorage.setItem('user', JSON.stringify(appUser));
+    if (!appUser.emailVerified) {
+      setPendingVerificationEmail(appUser.email);
+      setVerificationToken(response.verificationToken ?? null);
+      setVerificationPreviewUrl(response.mailPreviewUrl ?? null);
+      router.replace({ pathname: '/(auth)/verify-email', params: { email: appUser.email } } as any);
+      return;
+    }
     router.replace(routeForRole(response.user.role) as any);
   }, []);
 
@@ -236,6 +306,25 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     console.log('[Auth] Password reset requested for:', email);
     await new Promise(resolve => setTimeout(resolve, 1000));
   }, []);
+
+  const verifyEmail = useCallback(async (token: string) => {
+    await authService.verifyEmail(token);
+    const profile = await authService.getProfile();
+    const mapped = toAppUser(profile);
+    setUser(mapped);
+    setRole(profile.role);
+    setPendingVerificationEmail(null);
+    setVerificationToken(null);
+    setVerificationPreviewUrl(null);
+    await AsyncStorage.setItem('user', JSON.stringify(mapped));
+    router.replace(routeForRole(profile.role) as any);
+  }, []);
+
+  const resendVerification = useCallback(async (emailOverride?: string) => {
+    const res = await authService.requestVerification(emailOverride ?? pendingVerificationEmail ?? undefined);
+    setVerificationToken(res.verificationToken ?? null);
+    setVerificationPreviewUrl(res.mailPreviewUrl ?? null);
+  }, [pendingVerificationEmail]);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     if (!role) throw new Error('Not authenticated');
@@ -284,6 +373,10 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   return useMemo(() => ({
     user,
     role,
+    emailVerified: user?.emailVerified ?? false,
+    pendingVerificationEmail,
+    verificationToken,
+    verificationPreviewUrl,
     isLoading,
     isAuthenticated: !!user,
     isAdmin:    role === 'admin',
@@ -298,6 +391,8 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     toggleFavorite,
     forgotPassword,
     changePassword,
+    verifyEmail,
+    resendVerification,
     deleteAccount,
     hasCompletedOnboarding,
     completeOnboarding,
@@ -312,7 +407,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   }), [
     user, role, isLoading,
     signIn, signInBusiness, signUp, signUpBusiness, signOut,
-    updateProfile, toggleFavorite, forgotPassword, changePassword, deleteAccount,
+    updateProfile, toggleFavorite, forgotPassword, changePassword, verifyEmail, resendVerification, deleteAccount,
     hasCompletedOnboarding, completeOnboarding, onboardingState, setUserType,
     needsOnboarding, requireAuth, showSignInModal, signInPrompt,
   ]);

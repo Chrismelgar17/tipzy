@@ -16,6 +16,7 @@ export interface AuthUser {
   phone?: string;
   role: UserRole;
   createdAt: string;
+  emailVerified?: boolean;
   // Business-specific
   businessName?: string;
   businessCategory?: string;
@@ -27,6 +28,8 @@ export interface AuthResponse {
   user: AuthUser;
   token: string;
   refreshToken: string;
+  verificationToken?: string;
+  mailPreviewUrl?: string;
 }
 
 export interface TokenRefreshResponse {
@@ -77,6 +80,25 @@ export const authService = {
   changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
     try {
       await api.post("/customer/change-password", { currentPassword, newPassword });
+    } catch (e) { throw handleAuthError(e as ApiError); }
+  },
+
+  requestVerification: async (email?: string): Promise<{ verificationToken?: string; mailPreviewUrl?: string }> => {
+    try {
+      const payload = email ? { email } : {};
+      const { data } = await api.post<{ message: string; verificationToken?: string; mailPreviewUrl?: string }>("/customer/request-verification", payload);
+      return { verificationToken: data.verificationToken, mailPreviewUrl: (data as any).mailPreviewUrl };
+    } catch (e) { throw handleAuthError(e as ApiError); }
+  },
+
+  verifyEmail: async (token: string): Promise<void> => {
+    try {
+      await api.post("/customer/verify", { token });
+      const stored = await secureStorage.getUserData<AuthUser>();
+      if (stored) {
+        stored.emailVerified = true;
+        await secureStorage.saveUserData(stored);
+      }
     } catch (e) { throw handleAuthError(e as ApiError); }
   },
 
