@@ -79,6 +79,30 @@ export const authService = {
     } catch (e) { throw handleAuthError(e as ApiError); }
   },
 
+  /** Try customer login; if the account is a business/admin, fall back to business login. */
+  loginAny: async (email: string, password: string): Promise<AuthResponse> => {
+    try {
+      const { data } = await api.post<AuthResponse>("/customer/login", { email, password });
+      if (!data.token || !data.user) throw new Error("Unexpected response from server");
+      await saveSession(data.token, data.refreshToken, data.user);
+      return data;
+    } catch (e) {
+      const err = e as ApiError;
+      const status = err?.response?.status;
+      const msg = (err?.response?.data as any)?.error ?? '';
+      // 403 "Not a customer account" => try business login
+      if (status === 403 && msg.toLowerCase().includes('customer')) {
+        try {
+          const { data } = await api.post<AuthResponse>("/business/login", { email, password });
+          if (!data.token || !data.user) throw new Error("Unexpected response from server");
+          await saveSession(data.token, data.refreshToken, data.user);
+          return data;
+        } catch (bizErr) { throw handleAuthError(bizErr as ApiError); }
+      }
+      throw handleAuthError(err);
+    }
+  },
+
   loginWithProvider: async (provider: SocialAuthProvider, payload: ProviderAuthPayload): Promise<AuthResponse> => {
     try {
       const { data } = await api.post<AuthResponse>("/customer/provider-auth", { provider, ...payload });
@@ -136,6 +160,30 @@ export const authService = {
   ): Promise<AuthResponse> => {
     try {
       const { data } = await api.post<AuthResponse>("/business/register", { name, email, password, businessName, businessCategory, phone });
+      if (!data.token || !data.user) throw new Error("Unexpected response from server");
+      await saveSession(data.token, data.refreshToken, data.user);
+      return data;
+    } catch (e) { throw handleAuthError(e as ApiError); }
+  },
+
+  upgradeAccountToBusiness: async (
+    businessName: string,
+    businessCategory?: string,
+    phone?: string,
+    venueData?: {
+      address?: string;
+      capacity?: number;
+      minAge?: number;
+      hours?: Record<string, { open: string; close: string }>;
+      genres?: string[];
+      photos?: string[];
+    },
+  ): Promise<AuthResponse> => {
+    try {
+      const { data } = await api.patch<AuthResponse>("/business/upgrade-account", {
+        businessName, businessCategory, phone,
+        ...venueData,
+      });
       if (!data.token || !data.user) throw new Error("Unexpected response from server");
       await saveSession(data.token, data.refreshToken, data.user);
       return data;

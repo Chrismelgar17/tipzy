@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, router } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -8,6 +8,7 @@ import { TicketsProvider } from "@/hooks/tickets-context";
 import { ChatProvider } from "@/hooks/chat-context";
 import { ThemeProvider, useTheme } from "@/hooks/theme-context";
 import { VenuesProvider } from "@/hooks/venues-context";
+import { CapacityProvider } from "@/hooks/capacity-context";
 import { StatusBar } from "expo-status-bar";
 import { ErrorBoundary } from "react-error-boundary";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
@@ -23,20 +24,18 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
   
   useEffect(() => {
     console.error('App Error:', error);
-    
+
     // If it's a JSON parse error, clear all app data
     if (error.message.includes('JSON') || error.message.includes('Unexpected character')) {
       console.warn('JSON parse error detected, clearing all app data');
       clearAllAppData().then(() => {
-        router.replace('/(tabs)/home');
         resetErrorBoundary();
       });
       return;
     }
-    
-    // Auto-redirect to home after 3 seconds for other errors
+
+    // Auto-reset after 3 seconds for other errors
     const timer = setTimeout(() => {
-      router.replace('/(tabs)/home');
       resetErrorBoundary();
     }, 3000);
 
@@ -90,7 +89,6 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
           if (error.message.includes('JSON') || error.message.includes('Unexpected character')) {
             await clearAllAppData();
           }
-          router.replace('/(tabs)/home');
           resetErrorBoundary();
         }}
       >
@@ -104,16 +102,7 @@ function RootLayoutNav() {
   const { theme, themeMode } = useTheme();
   
   return (
-    <ErrorBoundary
-      FallbackComponent={ErrorFallback}
-      onError={(error: Error, errorInfo: any) => {
-        console.error('Navigation Error:', error, errorInfo);
-      }}
-      onReset={() => {
-        // Clear any problematic state
-        console.log('Resetting app state');
-      }}
-    >
+    <>
       <StatusBar style={themeMode === 'light' ? 'dark' : 'light'} />
       <Stack
         screenOptions={{
@@ -153,7 +142,7 @@ function RootLayoutNav() {
         <Stack.Screen name="privacy-policy" options={{ title: 'Privacy Policy' }} />
         <Stack.Screen name="terms-conditions" options={{ title: 'Terms & Conditions' }} />
       </Stack>
-    </ErrorBoundary>
+    </>
   );
 }
 
@@ -202,15 +191,27 @@ function ThemedRootLayout() {
 
   return (
     <GestureHandlerRootView style={rootStyles.container}>
-      <AuthProvider>
-        <VenuesProvider>
-          <TicketsProvider>
-            <ChatProvider>
-              <RootLayoutNav />
-            </ChatProvider>
-          </TicketsProvider>
-        </VenuesProvider>
-      </AuthProvider>
+      <ErrorBoundary
+        FallbackComponent={ErrorFallback}
+        onError={(error: Error, errorInfo: any) => {
+          console.error('Navigation Error:', error, errorInfo);
+        }}
+        onReset={() => {
+          console.log('Resetting app state');
+        }}
+      >
+        <AuthProvider>
+          <VenuesProvider>
+            <CapacityProvider>
+              <TicketsProvider>
+                <ChatProvider>
+                  <RootLayoutNav />
+                </ChatProvider>
+              </TicketsProvider>
+            </CapacityProvider>
+          </VenuesProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }

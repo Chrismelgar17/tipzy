@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User, UserType, OnboardingState } from '@/types/models';
 import { safeJsonParse, clearCorruptedData, clearAllAppData, secureStorage } from '@/utils/storage';
 import { authService, type AuthUser, type UserRole, type SocialAuthProvider } from '@/lib/auth.service';
+import { setSessionExpiredHandler } from '@/lib/api';
 
 interface AuthState {
   user: User | null;
@@ -24,6 +25,19 @@ interface AuthState {
   signInBusiness: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string, dob: Date, phone?: string) => Promise<void>;
   signUpBusiness: (name: string, email: string, password: string, businessName: string, businessCategory?: string, phone?: string) => Promise<void>;
+  upgradeAccountToBusiness: (
+    businessName: string,
+    businessCategory?: string,
+    phone?: string,
+    venueData?: {
+      address?: string;
+      capacity?: number;
+      minAge?: number;
+      hours?: Record<string, { open: string; close: string }>;
+      genres?: string[];
+      photos?: string[];
+    },
+  ) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<void>;
   toggleFavorite: (venueId: string) => void;
@@ -90,6 +104,13 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   useEffect(() => {
     loadUser();
     loadOnboardingState();
+    // When the API interceptor fails to refresh a token, force a full sign-out
+    // so isAuthenticated flips to false and the user is sent to the login screen.
+    setSessionExpiredHandler(() => {
+      setUser(null);
+      setRole(null);
+      router.replace('/(auth)/signin' as any);
+    });
   }, []);
 
   //  Session restore 
@@ -121,13 +142,17 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
             return;
           }
         } catch {
-          // Refresh failed  token truly expired
+          // Refresh failed – token truly expired, must sign in again
           console.warn('[Auth] Token refresh failed, clearing session');
           await secureStorage.clearAuthData();
+          await AsyncStorage.removeItem('user');
+          setUser(null);
+          setRole(null);
+          return;
         }
       }
 
-      // Fallback: locally cached user (no token)
+      // Fallback: locally cached user (no token — legacy path, no active session)
       const raw = await AsyncStorage.getItem('user');
       if (raw && (raw.startsWith('object') || raw.includes('Unexpected character'))) {
         await clearAllAppData();
@@ -190,7 +215,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
-      const response = await authService.login(email, password);
+      const response = await authService.loginAny(email, password);
       let appUser = toAppUser(response.user);
 
       // If backend says unverified, double-check with profile to avoid stale state
@@ -248,6 +273,9 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   const signInBusiness = useCallback(async (email: string, password: string) => {
     const response = await authService.loginBusiness(email, password);
     const appUser = toAppUser(response.user);
+    await secureStorage.saveToken(response.token);
+    await secureStorage.saveRefreshToken(response.refreshToken);
+    await secureStorage.saveUserData(response.user);
     setUser(appUser);
     setRole(response.user.role);
     await AsyncStorage.setItem('user', JSON.stringify(appUser));
@@ -294,6 +322,46 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
       return;
     }
     router.replace(routeForRole(response.user.role) as any);
+  }, []);
+
+  const upgradeAccountToBusiness = useCallback(async (
+    businessName: string,
+    businessCategory?: string,
+    phone?: string,
+    venueData?: {
+      address?: string;
+      capacity?: number;
+      minAge?: number;
+      hours?: Record<string, { open: string; close: string }>;
+      genres?: string[];
+      photos?: string[];
+    },
+  ) => {
+    // Proactively refresh so _memToken is guaranteed fresh for the upgrade call
+    try {
+      await authService.refreshTokens();
+    } catch {
+      // Refresh truly failed – clear session and send to login
+      await secureStorage.clearAuthData();
+      await AsyncStorage.removeItem('user');
+      setUser(null);
+      setRole(null);
+      router.replace('/(auth)/signin' as any);
+      throw new Error('Session expired. Please sign in again.');
+    }
+    const response = await authService.upgradeAccountToBusiness(businessName, businessCategory, phone, venueData);
+    const appUser = toAppUser(response.user);
+    await secureStorage.saveToken(response.token);
+    await secureStorage.saveRefreshToken(response.refreshToken);
+    await secureStorage.saveUserData(response.user);
+    setUser(appUser);
+    setRole('business');
+    await AsyncStorage.setItem('user', JSON.stringify(appUser));
+    // Defer navigation so React commits setRole('business') before the
+    // business layout mounts and checks isBusiness — same pattern as signInWithProvider
+    setTimeout(() => {
+      router.replace('/(business-tabs)/dashboard' as any);
+    }, 50);
   }, []);
 
   const signOut = useCallback(async () => {
@@ -409,6 +477,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     signInBusiness,
     signUp,
     signUpBusiness,
+    upgradeAccountToBusiness,
     signOut,
     updateProfile,
     toggleFavorite,
@@ -429,7 +498,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     setSignInPrompt,
   }), [
     user, role, isLoading,
-    signIn, signInWithProvider, signInBusiness, signUp, signUpBusiness, signOut,
+    signIn, signInWithProvider, signInBusiness, signUp, signUpBusiness, upgradeAccountToBusiness, signOut,
     updateProfile, toggleFavorite, forgotPassword, changePassword, verifyEmail, resendVerification, deleteAccount,
     hasCompletedOnboarding, completeOnboarding, onboardingState, setUserType,
     needsOnboarding, requireAuth, showSignInModal, signInPrompt,

@@ -13,6 +13,21 @@ export interface User {
   emailVerified?: boolean;
 }
 
+/** Traffic-light crowd colour shown in cards and the customer map */
+export type CrowdColor = 'green' | 'yellow' | 'red';
+
+/**
+ * Maps the backend crowdLevel string to a traffic-light CrowdColor.
+ *  quiet / moderate → green
+ *  busy             → yellow
+ *  packed           → red
+ */
+export function crowdColorFromLevel(level: Venue['crowdLevel']): CrowdColor {
+  if (level === 'packed') return 'red';
+  if (level === 'busy') return 'yellow';
+  return 'green';
+}
+
 export interface Venue {
   id: string;
   name: string;
@@ -29,6 +44,8 @@ export interface Venue {
   maxCapacity: number;
   currentCount: number;
   crowdLevel: 'quiet' | 'moderate' | 'busy' | 'packed';
+  /** Derived traffic-light colour – green (<60 %), yellow (60–85 %), red (>85 %) */
+  crowdColor?: CrowdColor;
   capacityStatus: 'quiet' | 'busy' | 'full';
   genres: string[];
   featuredRank: number;
@@ -78,6 +95,57 @@ export interface Order {
   stripePaymentIntentId?: string;
   status: 'requires_payment' | 'paid' | 'refunded' | 'canceled';
   createdAt: Date;
+}
+
+/**
+ * Richer order view used in the business Orders screen.
+ * Extends the base Order with venue/customer context and
+ * an explicit business-facing status lifecycle.
+ */
+export interface VenueOrder {
+  id: string;
+  orderId: string;
+  userId: string;
+  customerName: string;
+  customerEmail?: string;
+  venueId: string;
+  venueName: string;
+  eventId: string;
+  eventTitle: string;
+  product: string;
+  quantity: number;
+  amountTotal: number;
+  currency: string;
+  /** Business-facing lifecycle: pending → accepted | rejected → completed | refunded */
+  businessStatus: 'pending' | 'accepted' | 'rejected' | 'completed' | 'refunded';
+  orderDate: Date;
+  notes?: string;
+}
+
+/** Real-time capacity snapshot for a venue */
+export interface VenueCapacity {
+  venueId: string;
+  venueName: string;
+  currentCount: number;
+  maxCapacity: number;
+  /** Percentage 0-100 */
+  occupancyPct: number;
+  crowdLevel: 'quiet' | 'moderate' | 'busy' | 'packed';
+  /** Traffic-light mapping of crowdLevel */
+  crowdColor: CrowdColor;
+  updatedAt: Date;
+}
+
+/** Business dashboard summary stats */
+export interface BusinessDashboardStats {
+  venueId: string;
+  totalOrdersToday: number;
+  revenueToday: number;
+  pendingOrders: number;
+  acceptedOrders: number;
+  weeklyRevenue: number;
+  weeklySales: number;
+  weeklyViews: number;
 }
 
 export interface OrderItem {

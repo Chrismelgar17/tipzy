@@ -428,6 +428,8 @@ export default function AuthScreen() {
                       setErrors(prev => ({ ...prev, password: undefined }));
                     }}
                     secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
                     testID="password-input"
                   />
                 </View>

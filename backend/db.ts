@@ -42,6 +42,31 @@ export interface DbVenue {
   updated_at: string;
 }
 
+export interface DbOrder {
+  id: string;
+  user_id: string;
+  venue_id: string;
+  event_id: string | null;
+  product_name: string;
+  quantity: number;
+  amount_total: number;
+  currency: string;
+  /** business-facing status: pending → accepted | rejected → completed | refunded */
+  business_status: 'pending' | 'accepted' | 'rejected' | 'completed' | 'refunded';
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbCapacityLog {
+  id: string;
+  venue_id: string;
+  actor_user_id: string;
+  direction: 'in' | 'out';
+  count_after: number;
+  created_at: string;
+}
+
 export interface DbEmailVerification {
   token: string;
   user_id: string;
@@ -120,6 +145,31 @@ const initPromise = (async () => {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    CREATE TABLE IF NOT EXISTS orders (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      event_id TEXT,
+      product_name TEXT NOT NULL DEFAULT 'General Entry',
+      quantity INTEGER NOT NULL DEFAULT 1,
+      amount_total NUMERIC(10,2) NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      business_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (business_status IN ('pending','accepted','rejected','completed','refunded')),
+      notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS capacity_log (
+      id TEXT PRIMARY KEY,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      actor_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      direction TEXT NOT NULL CHECK (direction IN ('in','out')),
+      count_after INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 
   // Backfill column for existing deployments
@@ -129,6 +179,7 @@ const initPromise = (async () => {
   await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS users_provider_subject_unique ON users (auth_provider, provider_subject) WHERE provider_subject IS NOT NULL;");
 
   await ensureAdminSeed();
+  await ensureTestCustomerSeed();
 })();
 
 export async function ready() {
@@ -154,4 +205,24 @@ async function ensureAdminSeed() {
      ON CONFLICT (email) DO NOTHING`,
     [id, adminEmail, "Tipzy Admin", password_hash],
   );
+}
+
+async function ensureTestCustomerSeed() {
+  // Only seed in non-production environments
+  if (process.env.NODE_ENV === "production") return;
+
+  const testEmail = process.env.TEST_CUSTOMER_EMAIL ?? "test@tipzy.app";
+  const testPassword = process.env.TEST_CUSTOMER_PASSWORD ?? "Test1234!";
+  const existing = await pool.query("SELECT id FROM users WHERE email = $1", [testEmail]);
+  if (existing.rowCount && existing.rows[0]?.id) return;
+
+  const id = crypto.randomUUID?.() ?? `test_cust_${Date.now()}`;
+  const password_hash = await hashPassword(testPassword);
+  await pool.query(
+    `INSERT INTO users (id, email, name, password_hash, role, email_verified, created_at)
+     VALUES ($1, $2, $3, $4, 'customer', true, now())
+     ON CONFLICT (email) DO NOTHING`,
+    [id, testEmail, "Test Customer", password_hash],
+  );
+  console.log(`[seed] Test customer created: ${testEmail} / ${testPassword}`);
 }

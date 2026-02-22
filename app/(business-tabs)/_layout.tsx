@@ -1,9 +1,8 @@
-import { Tabs } from "expo-router";
+import { Tabs, Redirect } from "expo-router";
 import { Home, Gift, Plus, ShoppingCart, Settings } from "lucide-react-native";
-import React, { useEffect } from "react";
+import React from "react";
 import { theme } from "@/constants/theme";
 import { useAuth } from "@/hooks/auth-context";
-import { router } from "expo-router";
 import { View, StyleSheet } from "react-native";
 
 const styles = StyleSheet.create({
@@ -27,14 +26,10 @@ export default function BusinessTabLayout() {
   const { isAuthenticated, isLoading, isBusiness, isAdmin } = useAuth();
   const canAccess = isBusiness || isAdmin;
 
-  useEffect(() => {
-    if (!isLoading && (!isAuthenticated || !canAccess)) {
-      router.replace('/(auth)/signin');
-    }
-  }, [isAuthenticated, isLoading, canAccess]);
+  if (isLoading) return null;
 
   if (!isAuthenticated || !canAccess) {
-    return null;
+    return <Redirect href="/(auth)/signin" />;
   }
 
   return (

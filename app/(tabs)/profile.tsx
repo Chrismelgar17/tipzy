@@ -30,7 +30,7 @@ import * as Haptics from 'expo-haptics';
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
-  const { user, signOut, requireAuth, emailVerified, resendVerification, pendingVerificationEmail, isLoading } = useAuth();
+  const { user, signOut, requireAuth, emailVerified, resendVerification, pendingVerificationEmail, isLoading, isBusiness } = useAuth();
   const insets = useSafeAreaInsets();
 
   const styles = StyleSheet.create({
@@ -257,9 +257,11 @@ export default function ProfileScreen() {
   const menuItems = [
     {
       icon: Building2,
-      label: 'Register Your Venue',
-      value: 'Business owners',
-      onPress: () => router.push('/onboarding/business-form' as any),
+      label: isBusiness ? 'My Business Dashboard' : 'Register Your Venue',
+      value: isBusiness ? 'Manage your venue' : 'Business owners',
+      onPress: () => isBusiness
+        ? router.replace('/(business-tabs)/dashboard' as any)
+        : router.push('/onboarding/business-form' as any),
     },
     {
       icon: Heart,

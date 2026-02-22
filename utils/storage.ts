@@ -8,14 +8,20 @@ const STORAGE_KEYS = {
   USER_DATA: 'userData',
 } as const;
 
+// In-memory cache — survives JS execution but resets on full app restart.
+// Populated on every saveToken call so the API interceptor never has to
+// wait on an AsyncStorage read after the first login / token refresh.
+let _memToken: string | null = null;
+
 export const secureStorage = {
-  /** Persist the JWT access token */
+  /** Persist the JWT access token (in-memory + AsyncStorage) */
   saveToken: async (token: string | null | undefined): Promise<boolean> => {
     if (token == null || token === '') {
       console.warn('[secureStorage] saveToken called with empty value – skipping');
       return false;
     }
     try {
+      _memToken = token;
       await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
       return true;
     } catch (error) {
@@ -24,10 +30,13 @@ export const secureStorage = {
     }
   },
 
-  /** Retrieve the stored JWT access token */
+  /** Retrieve the stored JWT access token (in-memory first, then AsyncStorage) */
   getToken: async (): Promise<string | null> => {
+    if (_memToken) return _memToken;
     try {
-      return await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      const stored = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      if (stored) _memToken = stored;
+      return stored;
     } catch (error) {
       console.error('Error getting token:', error);
       return null;
@@ -88,6 +97,7 @@ export const secureStorage = {
   /** Remove both the token and user data (e.g. on logout) */
   clearAuthData: async (): Promise<boolean> => {
     try {
+      _memToken = null;
       await AsyncStorage.multiRemove([STORAGE_KEYS.AUTH_TOKEN, STORAGE_KEYS.REFRESH_TOKEN, STORAGE_KEYS.USER_DATA]);
       return true;
     } catch (error) {

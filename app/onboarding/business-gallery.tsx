@@ -10,7 +10,9 @@ import {
   Dimensions
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/theme-context';
+import { useAuth } from '@/hooks/auth-context';
 import { ArrowLeft, Plus, X } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -27,8 +29,13 @@ const SAMPLE_IMAGES = [
 export default function BusinessGalleryScreen() {
   const { theme } = useTheme();
   const router = useRouter();
-  
+  const { isAuthenticated, isLoading } = useAuth();
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
+
+  if (!isLoading && !isAuthenticated) {
+    router.replace('/(auth)/signin' as any);
+    return null;
+  }
 
   const handleImageSelect = (imageUrl: string) => {
     if (selectedImages.includes(imageUrl)) {
@@ -38,10 +45,13 @@ export default function BusinessGalleryScreen() {
     }
   };
 
-  const handleContinue = () => {
-    if (selectedImages.length === 0) {
-      return;
-    }
+  const handleContinue = async () => {
+    if (selectedImages.length === 0) return;
+    try {
+      const raw = await AsyncStorage.getItem('businessProfile');
+      const profile = raw ? JSON.parse(raw) : {};
+      await AsyncStorage.setItem('businessProfile', JSON.stringify({ ...profile, galleryImages: selectedImages }));
+    } catch {}
     router.push('/onboarding/business-hours' as any);
   };
 

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/theme-context';
+import { useAuth } from '@/hooks/auth-context';
 import { ArrowLeft, ChevronDown, Phone } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -41,12 +42,16 @@ const SERVICES = [
 
 export default function BusinessFormScreen() {
   const { theme } = useTheme();
+  const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
-  
+
+  // Require the user to be signed in before registering a business
+  if (!isLoading && !isAuthenticated) {
+    router.replace('/(auth)/signin' as any);
+    return null;
+  }
+
   const [formData, setFormData] = useState({
-    email: '',
-    businessEmail: '',
-    password: '',
     businessName: '',
     location: '',
     phone: '',
@@ -97,8 +102,8 @@ export default function BusinessFormScreen() {
   };
 
   const handleContinue = async () => {
-    if (!formData.email || !formData.businessEmail || !formData.password || !formData.businessName || 
-        !formData.location || !formData.phone || !formData.category || !formData.maxCapacity || !formData.minEntryAge) {
+    if (!formData.businessName || !formData.location || !formData.phone ||
+        !formData.category || !formData.maxCapacity || !formData.minEntryAge) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
@@ -119,11 +124,8 @@ export default function BusinessFormScreen() {
       return;
     }
 
-    // Save the business form data to AsyncStorage
     try {
       const businessProfile = {
-        id: 'business_' + Date.now(),
-        email: formData.businessEmail,
         businessName: formData.businessName,
         location: formData.location,
         phone: formData.phone,
@@ -146,9 +148,7 @@ export default function BusinessFormScreen() {
         status: 'pending' as const,
         createdAt: new Date(),
       };
-      
       await AsyncStorage.setItem('businessProfile', JSON.stringify(businessProfile));
-      console.log('Business profile saved with capacity:', capacity);
     } catch (error) {
       console.error('Failed to save business profile:', error);
       Alert.alert('Error', 'Failed to save business information. Please try again.');
@@ -420,53 +420,6 @@ export default function BusinessFormScreen() {
           <Text style={styles.subtitle}>
             Tell us about your venue to get started with Tipzy
           </Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Personal Email <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={formData.email}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
-              placeholder="your.email@example.com"
-              placeholderTextColor={theme.colors.text.secondary}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              testID="email-input"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Business Email <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={formData.businessEmail}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, businessEmail: text }))}
-              placeholder="business@example.com"
-              placeholderTextColor={theme.colors.text.secondary}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              testID="business-email-input"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Password <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={formData.password}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
-              placeholder="Create a secure password"
-              placeholderTextColor={theme.colors.text.secondary}
-              secureTextEntry
-              testID="password-input"
-            />
-          </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>

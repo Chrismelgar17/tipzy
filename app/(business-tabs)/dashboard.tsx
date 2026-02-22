@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useTheme } from '@/hooks/theme-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,128 +21,102 @@ import {
   Users,
   UserPlus,
   UserMinus,
+  RefreshCw,
+  Wifi,
+  WifiOff,
 } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BusinessProfile } from '@/types/models';
-import { safeJsonParse, clearCorruptedData } from '@/utils/storage';
+import { useAuth } from '@/hooks/auth-context';
+import { useCapacity, CROWD_COLOR_HEX, crowdColorLabel } from '@/hooks/capacity-context';
+import { BusinessDashboardStats } from '@/types/models';
+import api from '@/lib/api';
 
 const { width } = Dimensions.get('window');
 
-interface DashboardData {
-  weeklySales: number;
-  weeklyIncome: number;
-  weeklyViews: number;
-  chartData: { label: string; value: number }[];
-  currentCount: number;
-  maxCapacity: number;
-}
-
-const mockData: DashboardData = {
-  weeklySales: 127,
-  weeklyIncome: 3450,
-  weeklyViews: 2890,
-  currentCount: 85,
-  maxCapacity: 200, // This will be overridden by business profile data
-  chartData: [
-    { label: 'Mon', value: 450 },
-    { label: 'Tue', value: 320 },
-    { label: 'Wed', value: 580 },
-    { label: 'Thu', value: 720 },
-    { label: 'Fri', value: 890 },
-    { label: 'Sat', value: 1200 },
-    { label: 'Sun', value: 980 },
-  ],
-};
-
 type ChartType = 'sales' | 'income' | 'views';
+
+const FALLBACK_CHART = [
+  { label: 'Mon', value: 450 },
+  { label: 'Tue', value: 320 },
+  { label: 'Wed', value: 580 },
+  { label: 'Thu', value: 720 },
+  { label: 'Fri', value: 890 },
+  { label: 'Sat', value: 1200 },
+  { label: 'Sun', value: 980 },
+];
 
 export default function BusinessDashboard() {
   const { theme } = useTheme();
+  const { user } = useAuth();
+  const { capacity, isLoading, isUpdating, isPolling, lastUpdated, checkIn, checkOut, setVenueId, error, refresh } = useCapacity();
+
   const [selectedChart, setSelectedChart] = useState<ChartType>('sales');
-  const [currentCount, setCurrentCount] = useState<number>(mockData.currentCount);
-  const [maxCapacity, setMaxCapacity] = useState<number>(mockData.maxCapacity);
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [stats, setStats] = useState<BusinessDashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [venueIdResolved, setVenueIdResolved] = useState<string | null>(null);
+
+  // â”€â”€ fetch owned venue & stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const loadDashboard = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const res = await api.get<any>('/business/dashboard');
+      const data = res.data;
+      setStats(data);
+      if (data.venueId && !venueIdResolved) {
+        setVenueIdResolved(data.venueId);
+        setVenueId(data.venueId);
+      }
+    } catch (err) {
+      // backend not available â€“ capacity context will show mock via fallback
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [setVenueId, venueIdResolved]);
 
   useEffect(() => {
-    loadBusinessProfile();
+    loadDashboard();
   }, []);
 
-  const loadBusinessProfile = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('businessProfile');
-      const profile = safeJsonParse<BusinessProfile | null>(stored, null);
-      
-      if (profile && typeof profile === 'object' && profile.businessName) {
-        setBusinessProfile(profile);
-        setMaxCapacity(profile.maxCapacity);
-        setCurrentCount(profile.currentCount || 0);
-        console.log('Loaded business profile with capacity:', profile.maxCapacity);
-      } else if (stored && stored.trim()) {
-        console.warn('Invalid business profile format, using default capacity');
-        await clearCorruptedData('businessProfile');
-      } else {
-        console.log('No business profile found, using default capacity');
-      }
-    } catch (error) {
-      console.error('Failed to load business profile:', error);
-    }
-  };
+  // â”€â”€ derived values â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  const saveCapacityCount = async (newCount: number) => {
-    if (businessProfile) {
-      try {
-        const updatedProfile = { ...businessProfile, currentCount: newCount };
-        await AsyncStorage.setItem('businessProfile', JSON.stringify(updatedProfile));
-        setBusinessProfile(updatedProfile);
-        console.log('Saved current count:', newCount);
-      } catch (error) {
-        console.error('Failed to save capacity count:', error);
-      }
-    }
-  };
+  const currentCount = capacity?.currentCount ?? 0;
+  const maxCapacity   = capacity?.maxCapacity  ?? 200;
+  const occupancyPct  = capacity?.occupancyPct ?? Math.round((currentCount / maxCapacity) * 100);
+  const crowdColor    = capacity?.crowdColor   ?? 'green';
+  const crowdHex      = CROWD_COLOR_HEX[crowdColor];
+  const crowdLabel    = crowdColorLabel(crowdColor);
 
-  const handlePersonIn = () => {
-    if (currentCount >= maxCapacity) {
-      Alert.alert('Capacity Reached', 'Your venue is at maximum capacity.');
+  const isAtCapacity = currentCount >= maxCapacity;
+  const isEmpty      = currentCount <= 0;
+
+  const handlePersonIn = async () => {
+    if (isAtCapacity) {
+      Alert.alert('At Capacity', 'Your venue is at maximum capacity.');
       return;
     }
-    const newCount = currentCount + 1;
-    setCurrentCount(newCount);
-    saveCapacityCount(newCount);
+    await checkIn();
+    if (error) Alert.alert('Error', error);
   };
 
-  const handlePersonOut = () => {
-    if (currentCount <= 0) {
-      return;
-    }
-    const newCount = currentCount - 1;
-    setCurrentCount(newCount);
-    saveCapacityCount(newCount);
-  };
-
-  const getCapacityPercentage = () => {
-    return (currentCount / maxCapacity) * 100;
-  };
-
-  const getCapacityStatus = () => {
-    const percentage = getCapacityPercentage();
-    if (percentage <= 60) return { status: 'Quiet', color: theme.colors.success };
-    if (percentage <= 85) return { status: 'Busy', color: theme.colors.warning };
-    return { status: 'Full', color: theme.colors.error };
+  const handlePersonOut = async () => {
+    if (isEmpty) return;
+    await checkOut();
+    if (error) Alert.alert('Error', error);
   };
 
   const getChartData = () => {
+    const base = FALLBACK_CHART;
     switch (selectedChart) {
-      case 'income':
-        return mockData.chartData.map(item => ({ ...item, value: item.value * 2.5 }));
-      case 'views':
-        return mockData.chartData.map(item => ({ ...item, value: item.value * 0.8 }));
-      default:
-        return mockData.chartData;
+      case 'income': return base.map(item => ({ ...item, value: item.value * 2.5 }));
+      case 'views':  return base.map(item => ({ ...item, value: item.value * 0.8 }));
+      default:       return base;
     }
   };
 
   const maxValue = Math.max(...getChartData().map(item => item.value));
+
+  const formattedLastUpdated = lastUpdated
+    ? new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null;
 
   const styles = StyleSheet.create({
     container: {
@@ -186,6 +161,126 @@ export default function BusinessDashboard() {
       fontSize: 12,
       color: 'rgba(255, 255, 255, 0.9)',
       textAlign: 'center',
+    },
+    capacitySection: {
+      backgroundColor: theme.colors.card,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.xl,
+    },
+    capacityHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    capacityTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    capacityTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: theme.colors.text.primary,
+    },
+    pollingDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.colors.success,
+    },
+    pollingDotOff: {
+      backgroundColor: theme.colors.text.tertiary,
+    },
+    capacityBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: theme.borderRadius.full,
+      gap: 6,
+    },
+    crowdDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+    },
+    capacityBadgeText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.white,
+    },
+    capacityDisplay: {
+      alignItems: 'center',
+      marginBottom: theme.spacing.lg,
+    },
+    capacityCount: {
+      fontSize: 56,
+      fontWeight: '800',
+      marginBottom: 4,
+    },
+    capacityLabel: {
+      fontSize: 14,
+      color: theme.colors.text.secondary,
+      marginBottom: theme.spacing.md,
+    },
+    capacityBar: {
+      width: '100%',
+      height: 10,
+      backgroundColor: theme.colors.background,
+      borderRadius: 5,
+      overflow: 'hidden',
+      marginBottom: theme.spacing.sm,
+    },
+    capacityFill: {
+      height: '100%',
+      borderRadius: 5,
+    },
+    capacityPct: {
+      fontSize: 12,
+      color: theme.colors.text.secondary,
+      textAlign: 'right',
+      width: '100%',
+      marginBottom: theme.spacing.lg,
+    },
+    capacityButtons: {
+      flexDirection: 'row',
+      gap: theme.spacing.md,
+    },
+    capacityButton: {
+      flex: 1,
+      borderRadius: theme.borderRadius.md,
+      overflow: 'hidden',
+    },
+    capacityButtonGradient: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: theme.spacing.md,
+      gap: 8,
+    },
+    capacityButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.white,
+    },
+    capacityButtonDisabled: {
+      opacity: 0.4,
+    },
+    lastUpdatedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: theme.spacing.sm,
+      gap: 6,
+    },
+    lastUpdatedText: {
+      fontSize: 11,
+      color: theme.colors.text.tertiary,
+    },
+    refreshBtn: {
+      padding: 4,
     },
     chartSection: {
       backgroundColor: theme.colors.card,
@@ -251,6 +346,43 @@ export default function BusinessDashboard() {
       textAlign: 'center',
       width: (width - theme.spacing.lg * 2 - theme.spacing.lg * 2 - theme.spacing.sm * 2) / 7,
     },
+    statsRow: {
+      flexDirection: 'row',
+      gap: theme.spacing.md,
+      marginBottom: theme.spacing.xl,
+    },
+    statCard: {
+      flex: 1,
+      backgroundColor: theme.colors.card,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.md,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    statValue: {
+      fontSize: 22,
+      fontWeight: '700',
+      color: theme.colors.text.primary,
+      marginBottom: 2,
+    },
+    statLabel: {
+      fontSize: 11,
+      color: theme.colors.text.secondary,
+      textAlign: 'center',
+    },
+    pendingBadge: {
+      backgroundColor: `${theme.colors.warning}20`,
+      borderRadius: theme.borderRadius.full,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      marginTop: 4,
+    },
+    pendingBadgeText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: theme.colors.warning,
+    },
     quickActions: {
       backgroundColor: theme.colors.card,
       borderRadius: theme.borderRadius.lg,
@@ -286,275 +418,215 @@ export default function BusinessDashboard() {
       color: theme.colors.text.primary,
       textAlign: 'center',
     },
-    capacitySection: {
-      backgroundColor: theme.colors.card,
-      borderRadius: theme.borderRadius.lg,
-      padding: theme.spacing.lg,
-      marginBottom: theme.spacing.xl,
-    },
-    capacityHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: theme.spacing.lg,
-    },
-    capacityTitle: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: theme.colors.text.primary,
-    },
-    capacityStatus: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: theme.borderRadius.full,
-    },
-    capacityStatusText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: theme.colors.white,
-    },
-    capacityDisplay: {
-      alignItems: 'center',
-      marginBottom: theme.spacing.lg,
-    },
-    capacityCount: {
-      fontSize: 48,
-      fontWeight: '700',
-      color: theme.colors.text.primary,
-      marginBottom: 8,
-    },
-    capacityLabel: {
-      fontSize: 16,
-      color: theme.colors.text.secondary,
-      marginBottom: theme.spacing.md,
-    },
-    capacityBar: {
-      width: '100%',
-      height: 8,
-      backgroundColor: theme.colors.background,
-      borderRadius: 4,
-      overflow: 'hidden',
-      marginBottom: theme.spacing.lg,
-    },
-    capacityFill: {
-      height: '100%',
-      borderRadius: 4,
-    },
-    capacityButtons: {
-      flexDirection: 'row',
-      gap: theme.spacing.md,
-    },
-    capacityButton: {
-      flex: 1,
-      borderRadius: theme.borderRadius.md,
-      overflow: 'hidden',
-    },
-    capacityButtonGradient: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: theme.spacing.md,
-      gap: 8,
-    },
-    capacityButtonText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.colors.white,
-    },
-    capacityButtonDisabled: {
-      opacity: 0.5,
-    },
   });
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.scrollContent}>
+
+          {/* â”€â”€ Summary cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <View style={styles.summaryContainer}>
-            <TouchableOpacity style={styles.summaryCard} testID="weekly-sales-card">
+            <TouchableOpacity style={styles.summaryCard}>
               <LinearGradient
                 colors={[theme.colors.purple, theme.colors.purpleLight]}
                 style={styles.summaryGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               >
                 <View style={styles.summaryIcon}>
                   <DollarSign size={24} color={theme.colors.white} />
                 </View>
-                <Text style={styles.summaryValue}>{mockData.weeklySales}</Text>
+                <Text style={styles.summaryValue}>
+                  {statsLoading ? 'â€“' : stats?.weeklySales ?? 127}
+                </Text>
                 <Text style={styles.summaryLabel}>Weekly{'\n'}Sales</Text>
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.summaryCard} testID="weekly-income-card">
+            <TouchableOpacity style={styles.summaryCard}>
               <LinearGradient
                 colors={[theme.colors.cyan, theme.colors.cyanLight]}
                 style={styles.summaryGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               >
                 <View style={styles.summaryIcon}>
                   <TrendingUp size={24} color={theme.colors.white} />
                 </View>
-                <Text style={styles.summaryValue}>${mockData.weeklyIncome}</Text>
+                <Text style={styles.summaryValue}>
+                  ${statsLoading ? 'â€“' : stats?.weeklyRevenue ?? 3450}
+                </Text>
                 <Text style={styles.summaryLabel}>Weekly{'\n'}Income</Text>
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.summaryCard} testID="weekly-views-card">
+            <TouchableOpacity style={styles.summaryCard}>
               <LinearGradient
                 colors={[theme.colors.success, '#4ECDC4']}
                 style={styles.summaryGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               >
                 <View style={styles.summaryIcon}>
                   <Eye size={24} color={theme.colors.white} />
                 </View>
-                <Text style={styles.summaryValue}>{mockData.weeklyViews}</Text>
+                <Text style={styles.summaryValue}>
+                  {statsLoading ? 'â€“' : stats?.weeklyViews ?? 2890}
+                </Text>
                 <Text style={styles.summaryLabel}>Weekly{'\n'}Views</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
 
+          {/* â”€â”€ Today's stats row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                {statsLoading ? 'â€“' : stats?.totalOrdersToday ?? 0}
+              </Text>
+              <Text style={styles.statLabel}>Orders Today</Text>
+              {(stats?.pendingOrders ?? 0) > 0 && (
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.pendingBadgeText}>{stats!.pendingOrders} pending</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                ${statsLoading ? 'â€“' : (stats?.revenueToday ?? 0).toFixed(0)}
+              </Text>
+              <Text style={styles.statLabel}>Revenue Today</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                {statsLoading ? 'â€“' : stats?.acceptedOrders ?? 0}
+              </Text>
+              <Text style={styles.statLabel}>Accepted</Text>
+            </View>
+          </View>
+
+          {/* â”€â”€ Live Capacity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <View style={styles.capacitySection}>
             <View style={styles.capacityHeader}>
-              <Text style={styles.capacityTitle}>Live Capacity</Text>
-              <View style={[styles.capacityStatus, { backgroundColor: getCapacityStatus().color }]}>
-                <Text style={styles.capacityStatusText}>{getCapacityStatus().status}</Text>
+              <View style={styles.capacityTitleRow}>
+                <Text style={styles.capacityTitle}>Live Capacity</Text>
+                {/* Pulse dot: green = polling active, grey = offline */}
+                <View style={[styles.pollingDot, !isPolling && styles.pollingDotOff]} />
+              </View>
+
+              {/* Traffic-light crowd badge */}
+              <View style={[styles.capacityBadge, { backgroundColor: crowdHex }]}>
+                <View style={[styles.crowdDot, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
+                <Text style={styles.capacityBadgeText}>{crowdLabel}</Text>
               </View>
             </View>
 
-            <View style={styles.capacityDisplay}>
-              <Text style={styles.capacityCount}>{currentCount}</Text>
-              <Text style={styles.capacityLabel}>Current: {currentCount} / Max: {maxCapacity}</Text>
-              
-              <View style={styles.capacityBar}>
-                <LinearGradient
-                  colors={[getCapacityStatus().color, getCapacityStatus().color]}
-                  style={[styles.capacityFill, { width: `${Math.min(getCapacityPercentage(), 100)}%` }]}
-                />
-              </View>
-            </View>
+            {isLoading ? (
+              <ActivityIndicator color={theme.colors.purple} style={{ marginVertical: 24 }} />
+            ) : (
+              <>
+                <View style={styles.capacityDisplay}>
+                  <Text style={[styles.capacityCount, { color: crowdHex }]}>
+                    {currentCount}
+                  </Text>
+                  <Text style={styles.capacityLabel}>
+                    {currentCount} / {maxCapacity} guests
+                  </Text>
 
-            <View style={styles.capacityButtons}>
-              <TouchableOpacity 
-                style={[
-                  styles.capacityButton,
-                  currentCount <= 0 && styles.capacityButtonDisabled
-                ]}
-                onPress={handlePersonOut}
-                disabled={currentCount <= 0}
-                testID="person-out-button"
-              >
-                <LinearGradient
-                  colors={[theme.colors.error, '#FF6B6B']}
-                  style={styles.capacityButtonGradient}
-                >
-                  <UserMinus size={20} color={theme.colors.white} />
-                  <Text style={styles.capacityButtonText}>Person Out</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                  {/* Progress bar */}
+                  <View style={styles.capacityBar}>
+                    <LinearGradient
+                      colors={[crowdHex, crowdHex]}
+                      style={[styles.capacityFill, { width: `${Math.min(occupancyPct, 100)}%` }]}
+                    />
+                  </View>
+                  <Text style={styles.capacityPct}>{occupancyPct}% full</Text>
+                </View>
 
-              <TouchableOpacity 
-                style={[
-                  styles.capacityButton,
-                  currentCount >= maxCapacity && styles.capacityButtonDisabled
-                ]}
-                onPress={handlePersonIn}
-                disabled={currentCount >= maxCapacity}
-                testID="person-in-button"
-              >
-                <LinearGradient
-                  colors={[theme.colors.success, '#4ECDC4']}
-                  style={styles.capacityButtonGradient}
-                >
-                  <UserPlus size={20} color={theme.colors.white} />
-                  <Text style={styles.capacityButtonText}>Person In</Text>
-                </LinearGradient>
+                {/* Check-in / Check-out buttons */}
+                <View style={styles.capacityButtons}>
+                  <TouchableOpacity
+                    style={[styles.capacityButton, isEmpty && styles.capacityButtonDisabled]}
+                    onPress={handlePersonOut}
+                    disabled={isEmpty || isUpdating}
+                    testID="person-out-button"
+                  >
+                    <LinearGradient
+                      colors={[theme.colors.error, '#FF6B6B']}
+                      style={styles.capacityButtonGradient}
+                    >
+                      {isUpdating
+                        ? <ActivityIndicator color={theme.colors.white} size="small" />
+                        : <UserMinus size={20} color={theme.colors.white} />}
+                      <Text style={styles.capacityButtonText}>Out</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.capacityButton, isAtCapacity && styles.capacityButtonDisabled]}
+                    onPress={handlePersonIn}
+                    disabled={isAtCapacity || isUpdating}
+                    testID="person-in-button"
+                  >
+                    <LinearGradient
+                      colors={[theme.colors.success, '#4ECDC4']}
+                      style={styles.capacityButtonGradient}
+                    >
+                      {isUpdating
+                        ? <ActivityIndicator color={theme.colors.white} size="small" />
+                        : <UserPlus size={20} color={theme.colors.white} />}
+                      <Text style={styles.capacityButtonText}>In</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {/* Last-updated timestamp + manual refresh */}
+            <View style={styles.lastUpdatedRow}>
+              {isPolling
+                ? <Wifi size={12} color={theme.colors.success} />
+                : <WifiOff size={12} color={theme.colors.text.tertiary} />}
+              <Text style={styles.lastUpdatedText}>
+                {formattedLastUpdated ? `Updated ${formattedLastUpdated}` : 'Not yet synced'}
+              </Text>
+              <TouchableOpacity style={styles.refreshBtn} onPress={refresh}>
+                <RefreshCw size={12} color={theme.colors.text.tertiary} />
               </TouchableOpacity>
             </View>
           </View>
 
+          {/* â”€â”€ Analytics chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <View style={styles.chartSection}>
             <View style={styles.chartHeader}>
               <Text style={styles.chartTitle}>Analytics</Text>
               <View style={styles.chartToggle}>
-                <TouchableOpacity
-                  style={[
-                    styles.toggleButton,
-                    selectedChart === 'sales' && styles.toggleButtonActive,
-                  ]}
-                  onPress={() => setSelectedChart('sales')}
-                  testID="sales-toggle"
-                >
-                  <Text
-                    style={[
-                      styles.toggleText,
-                      selectedChart === 'sales' && styles.toggleTextActive,
-                    ]}
+                {(['sales', 'income', 'views'] as ChartType[]).map(type => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.toggleButton, selectedChart === type && styles.toggleButtonActive]}
+                    onPress={() => setSelectedChart(type)}
+                    testID={`${type}-toggle`}
                   >
-                    Sales
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.toggleButton,
-                    selectedChart === 'income' && styles.toggleButtonActive,
-                  ]}
-                  onPress={() => setSelectedChart('income')}
-                  testID="income-toggle"
-                >
-                  <Text
-                    style={[
-                      styles.toggleText,
-                      selectedChart === 'income' && styles.toggleTextActive,
-                    ]}
-                  >
-                    Income
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.toggleButton,
-                    selectedChart === 'views' && styles.toggleButtonActive,
-                  ]}
-                  onPress={() => setSelectedChart('views')}
-                  testID="views-toggle"
-                >
-                  <Text
-                    style={[
-                      styles.toggleText,
-                      selectedChart === 'views' && styles.toggleTextActive,
-                    ]}
-                  >
-                    Views
-                  </Text>
-                </TouchableOpacity>
+                    <Text style={[styles.toggleText, selectedChart === type && styles.toggleTextActive]}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
 
             <View style={styles.chartContainer}>
               {getChartData().map((item, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.chartBar,
-                    { height: (item.value / maxValue) * 160 },
-                  ]}
-                />
+                <View key={index} style={[styles.chartBar, { height: (item.value / maxValue) * 160 }]} />
               ))}
             </View>
-
             <View style={styles.chartLabels}>
               {getChartData().map((item, index) => (
-                <Text key={index} style={styles.chartLabel}>
-                  {item.label}
-                </Text>
+                <Text key={index} style={styles.chartLabel}>{item.label}</Text>
               ))}
             </View>
           </View>
 
+          {/* â”€â”€ Quick actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <View style={styles.quickActions}>
             <Text style={styles.quickActionsTitle}>Quick Actions</Text>
             <View style={styles.actionGrid}>
@@ -587,6 +659,7 @@ export default function BusinessDashboard() {
               </TouchableOpacity>
             </View>
           </View>
+
         </View>
       </ScrollView>
     </SafeAreaView>

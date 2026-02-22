@@ -10,9 +10,21 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { MapPin, Users, Clock } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
-import { Venue } from '@/types/models';
+import { Venue, crowdColorFromLevel } from '@/types/models';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
+
+/** Traffic-light hex values (matches CROWD_COLOR_HEX in capacity-context) */
+const CROWD_HEX: Record<'green' | 'yellow' | 'red', string> = {
+  green:  '#4CAF50',
+  yellow: '#FF9800',
+  red:    '#F44336',
+};
+const CROWD_LABEL: Record<'green' | 'yellow' | 'red', string> = {
+  green:  'Quiet',
+  yellow: 'Busy',
+  red:    'Packed',
+};
 
 interface VenueCardProps {
   venue: Venue;
@@ -23,41 +35,19 @@ interface VenueCardProps {
 const { width } = Dimensions.get('window');
 
 export const VenueCard: React.FC<VenueCardProps> = ({ venue, onPress, onBuyPress }) => {
-  const getCapacityPercentage = () => {
-    if (!venue.maxCapacity || venue.maxCapacity === 0) return 0;
-    return (venue.currentCount / venue.maxCapacity) * 100;
-  };
+  // Derive crowd colour from the crowdLevel field (or pre-computed crowdColor)
+  const crowdColor = venue.crowdColor ?? crowdColorFromLevel(venue.crowdLevel ?? 'quiet');
+  const crowdHex   = CROWD_HEX[crowdColor];
+  const crowdLabel = CROWD_LABEL[crowdColor];
 
-  const getCapacityStatus = () => {
-    const percentage = getCapacityPercentage();
-    if (percentage <= 60) return { status: 'Quiet', color: theme.colors.success };
-    if (percentage <= 85) return { status: 'Busy', color: theme.colors.warning };
-    return { status: 'Full', color: theme.colors.error };
-  };
-
-  const getCapacityColor = () => {
-    return getCapacityStatus().color;
-  };
-
-  const getCapacityText = () => {
-    return getCapacityStatus().status;
-  };
-
-  const getPriceSymbol = () => {
-    return '$'.repeat(venue.priceLevel);
-  };
+  const getPriceSymbol = () => '$'.repeat(venue.priceLevel);
 
   const handlePress = () => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress();
   };
-
   const handleBuyPress = () => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onBuyPress();
   };
 
@@ -78,12 +68,13 @@ export const VenueCard: React.FC<VenueCardProps> = ({ venue, onPress, onBuyPress
           style={styles.gradient}
         >
           <View style={styles.topRow}>
-            <View style={[styles.capacityBadge, { backgroundColor: getCapacityColor() }]}>
+            {/* Traffic-light capacity badge */}
+            <View style={[styles.capacityBadge, { backgroundColor: crowdHex }]}>
               <Users size={14} color={theme.colors.white} />
               <Text style={styles.capacityText}>{venue.currentCount || 0}/{venue.maxCapacity || venue.capacity}</Text>
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: getCapacityColor() }]}>
-              <Text style={styles.statusText}>{getCapacityText()}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: crowdHex }]}>
+              <Text style={styles.statusText}>{crowdLabel}</Text>
             </View>
             <View style={styles.priceBadge}>
               <Text style={styles.priceText}>{getPriceSymbol()}</Text>

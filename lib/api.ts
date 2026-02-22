@@ -1,6 +1,15 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { secureStorage } from '@/utils/storage';
 import apiConfig from './api.config';
+
+// ── Global session-expiry callback ──────────────────────────────────────────
+// The auth context registers this so the response interceptor can force a
+// full sign-out when a token refresh fails.
+let _onSessionExpired: (() => void) | null = null;
+export function setSessionExpiredHandler(handler: () => void) {
+  _onSessionExpired = handler;
+}
 
 /**
  * Axios instance pre-configured with base URL and timeout.
@@ -19,7 +28,7 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     try {
-      const token = await AsyncStorage.getItem('authToken');
+      const token = await secureStorage.getToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -60,8 +69,10 @@ api.interceptors.response.use(
           originalRequest.headers['Authorization'] = `Bearer ${token}`;
           return api(originalRequest);
         } catch {
-          console.warn('[Auth] Refresh failed – clearing session');
-          await AsyncStorage.multiRemove(['authToken', 'refreshToken', 'userData']);
+          console.warn('[Auth] Refresh failed – forcing sign-out');
+          await secureStorage.clearAuthData();
+          await AsyncStorage.removeItem('user');
+          _onSessionExpired?.();
         }
       }
 

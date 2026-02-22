@@ -9,7 +9,9 @@ import {
   Switch
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/theme-context';
+import { useAuth } from '@/hooks/auth-context';
 import { ArrowLeft, Clock } from 'lucide-react-native';
 import { WorkHours, DayHours } from '@/types/models';
 
@@ -32,7 +34,7 @@ const TIME_SLOTS = [
 export default function BusinessHoursScreen() {
   const { theme } = useTheme();
   const router = useRouter();
-  
+  const { isAuthenticated, isLoading } = useAuth();
   const [workHours, setWorkHours] = useState<WorkHours>({
     monday: { isOpen: false, openTime: '18:00', closeTime: '02:00' },
     tuesday: { isOpen: false, openTime: '18:00', closeTime: '02:00' },
@@ -47,6 +49,11 @@ export default function BusinessHoursScreen() {
     day: keyof WorkHours | null;
     type: 'open' | 'close' | null;
   }>({ day: null, type: null });
+
+  if (!isLoading && !isAuthenticated) {
+    router.replace('/(auth)/signin' as any);
+    return null;
+  }
 
   const handleDayToggle = (day: keyof WorkHours) => {
     setWorkHours(prev => ({
@@ -72,7 +79,12 @@ export default function BusinessHoursScreen() {
     setShowTimePicker({ day: null, type: null });
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    try {
+      const raw = await AsyncStorage.getItem('businessProfile');
+      const profile = raw ? JSON.parse(raw) : {};
+      await AsyncStorage.setItem('businessProfile', JSON.stringify({ ...profile, workHours }));
+    } catch {}
     router.push('/onboarding/business-confirmation' as any);
   };
 

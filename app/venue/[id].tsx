@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Dimensions,
   SafeAreaView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -22,23 +23,58 @@ import {
 
 } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
-import { mockVenues, mockEvents } from '@/mocks/venues';
+import { mockEvents } from '@/mocks/venues';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-context';
+import { Venue, crowdColorFromLevel } from '@/types/models';
 import * as Haptics from 'expo-haptics';
+import api from '@/lib/api';
 
 const { width, height } = Dimensions.get('window');
+
+/** Get tonight's closing time from the hours dict */
+function getTonightClosingTime(hours: Venue['hours']): string {
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const today = days[new Date().getDay()];
+  return hours?.[today]?.close ?? 'Closed';
+}
+
+/** Check if venue is open tonight */
+function isOpenTonight(hours: Venue['hours']): boolean {
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const today = days[new Date().getDay()];
+  return !!hours?.[today]?.open;
+}
 
 export default function VenueDetailScreen() {
   const { id } = useLocalSearchParams();
   const { user, toggleFavorite } = useAuth();
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [venue, setVenue] = useState<Venue | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  const venue = mockVenues.find(v => v.id === id);
-  const events = mockEvents.filter(e => e.venueId === id);
-  const isFavorite = user?.favorites.includes(id as string);
+  useEffect(() => {
+    const venueId = typeof id === 'string' ? id : id?.[0];
+    if (!venueId) { setNotFound(true); setIsLoading(false); return; }
+    api.get<Venue>(`/venues/${venueId}`)
+      .then(res => setVenue(res.data))
+      .catch(() => setNotFound(true))
+      .finally(() => setIsLoading(false));
+  }, [id]);
 
-  if (!venue) {
+  const events = mockEvents.filter(e => e.venueId === (typeof id === 'string' ? id : id?.[0]));
+  const isFavorite = user?.favorites.includes(typeof id === 'string' ? id : (id?.[0] ?? ''));
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator size="large" color={theme.colors.purple} style={{ marginTop: 80 }} />
+      </SafeAreaView>
+    );
+  }
+
+  if (notFound || !venue) {
     return (
       <SafeAreaView style={styles.container}>
         <Text style={styles.errorText}>Venue not found</Text>
@@ -68,13 +104,10 @@ export default function VenueDetailScreen() {
   };
 
   const getCrowdColor = () => {
-    switch (venue.crowdLevel) {
-      case 'quiet': return theme.colors.success;
-      case 'moderate': return theme.colors.cyan;
-      case 'busy': return theme.colors.warning;
-      case 'packed': return theme.colors.error;
-      default: return theme.colors.gray[500];
-    }
+    const color = venue.crowdColor ?? crowdColorFromLevel(venue.crowdLevel ?? 'quiet');
+    if (color === 'red')    return theme.colors.error;
+    if (color === 'yellow') return theme.colors.warning;
+    return theme.colors.success;
   };
 
   return (
@@ -164,7 +197,11 @@ export default function VenueDetailScreen() {
               <Clock size={20} color={theme.colors.text.secondary} />
               <View style={styles.infoText}>
                 <Text style={styles.infoLabel}>Tonight&apos;s Hours</Text>
-                <Text style={styles.infoValue}>Open until {venue.closingTime}</Text>
+                <Text style={styles.infoValue}>
+                  {isOpenTonight(venue.hours)
+                    ? `Open until ${getTonightClosingTime(venue.hours)}`
+                    : 'Closed today'}
+                </Text>
               </View>
             </View>
 
@@ -185,7 +222,7 @@ export default function VenueDetailScreen() {
             </View>
             <View style={styles.policyItem}>
               <Text style={styles.policyLabel}>Entry Age</Text>
-              <Text style={styles.policyValue}>{venue.minEntryAge || venue.minAge + '+'}</Text>
+              <Text style={styles.policyValue}>{venue.minEntryAge ?? `${venue.minAge}+`}</Text>
             </View>
             <View style={styles.policyItem}>
               <Text style={styles.policyLabel}>Capacity</Text>

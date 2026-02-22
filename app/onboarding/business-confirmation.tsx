@@ -1,25 +1,77 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
   TouchableOpacity, 
   StyleSheet, 
   SafeAreaView,
-  ScrollView
+  ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
 import { CheckCircle, Clock, Mail } from 'lucide-react-native';
 
 export default function BusinessConfirmationScreen() {
   const { theme } = useTheme();
-  const { completeOnboarding } = useAuth();
+  const { upgradeAccountToBusiness, completeOnboarding, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  if (!isLoading && !isAuthenticated) {
+    router.replace('/(auth)/signin' as any);
+    return null;
+  }
 
   const handleFinish = async () => {
-    await completeOnboarding();
-    router.replace('/onboarding/business-signin');
+    setIsSubmitting(true);
+    try {
+      const profileRaw = await AsyncStorage.getItem('businessProfile');
+      if (!profileRaw) {
+        Alert.alert('Error', 'Business data not found. Please start over.');
+        router.replace('/onboarding' as any);
+        return;
+      }
+
+      const profile = JSON.parse(profileRaw);
+      const phone = profile.phone ? `+1${profile.phone.replace(/\D/g, '')}` : undefined;
+
+      // Convert workHours {isOpen, openTime, closeTime} → {open, close} for API
+      const hours: Record<string, { open: string; close: string }> = {};
+      if (profile.workHours) {
+        for (const [day, val] of Object.entries(profile.workHours as Record<string, any>)) {
+          if (val.isOpen) hours[day] = { open: val.openTime, close: val.closeTime };
+        }
+      }
+
+      // Upgrade user role + create the venue atomically in one backend call.
+      // The backend returns a new business-role token AND the new venueId.
+      await upgradeAccountToBusiness(
+        profile.businessName,
+        profile.category,
+        phone,
+        {
+          address: profile.location ?? '',
+          capacity: profile.maxCapacity ?? 100,
+          minAge: profile.minEntryAge === '21+' ? 21 : 18,
+          hours,
+          genres: profile.services ?? [],
+          photos: profile.galleryImages ?? [],
+        },
+      );
+
+      await AsyncStorage.removeItem('businessProfile');
+      await completeOnboarding();
+      // upgradeAccountToBusiness already navigates to /(business-tabs)/dashboard
+    } catch (error: any) {
+      const message = error?.message || 'Registration failed. Please try again.';
+      Alert.alert('Registration Failed', message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const styles = StyleSheet.create({
@@ -199,11 +251,16 @@ export default function BusinessConfirmationScreen() {
           </View>
 
           <TouchableOpacity
-            style={styles.finishButton}
+            style={[styles.finishButton, isSubmitting && { opacity: 0.7 }]}
             onPress={handleFinish}
+            disabled={isSubmitting}
             testID="finish-button"
           >
-            <Text style={styles.finishButtonText}>Continue to Sign In</Text>
+            {isSubmitting ? (
+              <ActivityIndicator color={theme.colors.white} />
+            ) : (
+              <Text style={styles.finishButtonText}>Complete Registration</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.note}>

@@ -21,7 +21,7 @@ import * as Haptics from 'expo-haptics';
 
 export default function BusinessSignInScreen() {
   const { theme } = useTheme();
-  const { signIn } = useAuth();
+  const { signInBusiness } = useAuth();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,12 +39,9 @@ export default function BusinessSignInScreen() {
 
     setIsLoading(true);
     try {
-      // Add 'business' to email to trigger business role in mock auth
-      const businessEmail = email.includes('business') ? email : `business.${email}`;
-      await signIn(businessEmail, password);
-      router.replace('/(business-tabs)/dashboard');
-    } catch (error) {
-      Alert.alert('Error', 'Invalid credentials');
+      await signInBusiness(email.trim().toLowerCase(), password);
+    } catch (error: any) {
+      Alert.alert('Sign In Failed', error?.message || 'Invalid credentials');
     } finally {
       setIsLoading(false);
     }
@@ -227,11 +224,13 @@ export default function BusinessSignInScreen() {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
                 testID="business-password-input"
               />
             </View>
 
-            <TouchableOpacity style={styles.forgotPassword}>
+            <TouchableOpacity style={styles.forgotPassword} onPress={() => router.push('/forgot-password' as any)}>
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
             </TouchableOpacity>
 

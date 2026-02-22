@@ -517,6 +517,8 @@ export default function SignUpScreen() {
                       setErrors(prev => ({ ...prev, password: undefined }));
                     }}
                     secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
                   />
                 </View>
                 {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
