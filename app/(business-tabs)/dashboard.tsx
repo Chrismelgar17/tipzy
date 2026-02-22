@@ -104,10 +104,14 @@ export default function BusinessDashboard() {
   };
 
   const getChartData = () => {
+    if (selectedChart === 'views') {
+      const chart = (stats as any)?.weeklyViewsChart;
+      if (chart && chart.length > 0) return chart;
+      return FALLBACK_CHART.map((item: any) => ({ ...item, value: 0 }));
+    }
     const base = FALLBACK_CHART;
     switch (selectedChart) {
-      case 'income': return base.map(item => ({ ...item, value: item.value * 2.5 }));
-      case 'views':  return base.map(item => ({ ...item, value: item.value * 0.8 }));
+      case 'income': return base.map((item: any) => ({ ...item, value: item.value * 2.5 }));
       default:       return base;
     }
   };

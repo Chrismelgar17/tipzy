@@ -433,7 +433,7 @@ business.get("/dashboard", requireAuth, requireRole("business", "admin"), async 
     });
   }
 
-  const [todayRes, weekRes, pendingRes, acceptedRes] = await Promise.all([
+  const [todayRes, weekRes, pendingRes, acceptedRes, viewsRes] = await Promise.all([
     query<{ count: string; revenue: string }>(
       `SELECT COUNT(*)::text AS count, COALESCE(SUM(amount_total),0)::text AS revenue
        FROM orders WHERE venue_id = $1 AND created_at >= CURRENT_DATE`,
@@ -452,7 +452,34 @@ business.get("/dashboard", requireAuth, requireRole("business", "admin"), async 
       "SELECT COUNT(*)::text AS count FROM orders WHERE venue_id = $1 AND business_status = 'accepted'",
       [venue.id],
     ),
+    // Daily view counts for the last 7 days
+    query<{ day: string; count: string }>(
+      `SELECT TO_CHAR(viewed_at AT TIME ZONE 'UTC', 'Dy') AS day,
+              COUNT(*)::text AS count
+       FROM venue_views
+       WHERE venue_id = $1
+         AND viewed_at >= CURRENT_DATE - INTERVAL '6 days'
+       GROUP BY TO_CHAR(viewed_at AT TIME ZONE 'UTC', 'Dy'),
+                DATE_TRUNC('day', viewed_at AT TIME ZONE 'UTC')
+       ORDER BY DATE_TRUNC('day', viewed_at AT TIME ZONE 'UTC')`,
+      [venue.id],
+    ),
   ]);
+
+  // Build a full 7-day chart even if some days have 0 views
+  const DAYS_ORDER = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const today = new Date();
+  const viewsByDay: Record<string, number> = {};
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const label = d.toLocaleDateString('en-US', { weekday: 'short' });
+    viewsByDay[label] = 0;
+  }
+  for (const row of viewsRes.rows) {
+    viewsByDay[row.day] = Number(row.count);
+  }
+  const weeklyViewsChart = Object.entries(viewsByDay).map(([label, value]) => ({ label, value }));
 
   return c.json({
     venueId: venue.id,
@@ -464,7 +491,8 @@ business.get("/dashboard", requireAuth, requireRole("business", "admin"), async 
     acceptedOrders: Number(acceptedRes.rows[0]?.count ?? 0),
     weeklyRevenue: Number(weekRes.rows[0]?.revenue ?? 0),
     weeklySales: Number(weekRes.rows[0]?.count ?? 0),
-    weeklyViews: 0, // extend with analytics table in a later phase
+    weeklyViews: weeklyViewsChart.reduce((s, d) => s + d.value, 0),
+    weeklyViewsChart,
   });
 });
 

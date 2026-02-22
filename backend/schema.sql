@@ -99,6 +99,16 @@ CREATE TABLE IF NOT EXISTS capacity_log (
 
 CREATE INDEX IF NOT EXISTS capacity_log_venue_idx ON capacity_log (venue_id, created_at DESC);
 
+-- Tracks every customer view of a venue detail page
+CREATE TABLE IF NOT EXISTS venue_views (
+  id TEXT PRIMARY KEY,
+  venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+  viewer_user_id TEXT REFERENCES users(id) ON DELETE SET NULL, -- NULL for anonymous
+  viewed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS venue_views_venue_idx ON venue_views (venue_id, viewed_at DESC);
+
 -- Seed admin (optional if not present)
 INSERT INTO users (id, email, name, password_hash, role)
 VALUES ('admin_seed', 'admin@tipzy.app', 'Tipzy Admin', '__PENDING__', 'admin')

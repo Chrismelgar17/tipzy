@@ -226,6 +226,7 @@ export interface BusinessProfile {
   businessName: string;
   location: string;
   phone: string;
+  website?: string;
   category: string;
   services: string[];
   description: string;

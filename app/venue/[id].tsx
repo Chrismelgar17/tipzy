@@ -58,7 +58,11 @@ export default function VenueDetailScreen() {
     const venueId = typeof id === 'string' ? id : id?.[0];
     if (!venueId) { setNotFound(true); setIsLoading(false); return; }
     api.get<Venue>(`/venues/${venueId}`)
-      .then(res => setVenue(res.data))
+      .then(res => {
+        setVenue(res.data);
+        // Record the view – fire-and-forget, never blocks the UI
+        api.post(`/venues/${venueId}/view`).catch(() => {});
+      })
       .catch(() => setNotFound(true))
       .finally(() => setIsLoading(false));
   }, [id]);

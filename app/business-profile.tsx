@@ -20,6 +20,7 @@ import {
   Trash2,
   Plus,
   X,
+  Globe,
 } from 'lucide-react-native';
 import { BusinessProfile, WorkHours, DayHours } from '@/types/models';
 import * as ImagePicker from 'expo-image-picker';
@@ -30,6 +31,7 @@ interface FormData {
   businessName: string;
   email: string;
   phone: string;
+  website: string;
   location: string;
   category: string;
   services: string;
@@ -71,6 +73,7 @@ export default function BusinessProfileScreen() {
     businessName: '',
     email: user?.email || '',
     phone: '',
+    website: '',
     location: '',
     category: '',
     services: '',
@@ -102,6 +105,7 @@ export default function BusinessProfileScreen() {
             businessName: profile.businessName,
             email: profile.email,
             phone: profile.phone,
+            website: profile.website ?? '',
             location: profile.location,
             category: profile.category,
             services: profile.services.join(', '),
@@ -143,6 +147,7 @@ export default function BusinessProfileScreen() {
         businessName: formData.businessName.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
+        website: formData.website.trim() || undefined,
         location: formData.location.trim(),
         category: formData.category,
         services: formData.services.split(',').map(s => s.trim()).filter(s => s),
@@ -496,6 +501,20 @@ export default function BusinessProfileScreen() {
                 placeholder="(555) 123-4567"
                 placeholderTextColor={theme.colors.text.tertiary}
                 keyboardType="phone-pad"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Website</Text>
+              <TextInput
+                style={styles.input}
+                value={formData.website}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, website: text }))}
+                placeholder="https://yourvenue.com"
+                placeholderTextColor={theme.colors.text.tertiary}
+                keyboardType="url"
+                autoCapitalize="none"
+                autoCorrect={false}
               />
             </View>
 

@@ -84,7 +84,27 @@ venues.get("/:id", async (c) => {
   return c.json(rowToVenue(res.rows[0]));
 });
 
-// ---------- authenticated routes ----------
+// POST /api/venues/:id/view – record a customer view (public, auth optional)
+venues.post("/:id/view", async (c) => {
+  const venueId = c.req.param("id");
+  // Optionally extract userId from Bearer token without blocking unauthenticated users
+  let userId: string | null = null;
+  try {
+    const auth = c.req.header("Authorization");
+    if (auth?.startsWith("Bearer ")) {
+      const { verifyAccessToken } = await import("../auth");
+      const payload = await verifyAccessToken(auth.slice(7));
+      userId = (payload as any)?.sub ?? null;
+    }
+  } catch { /* anonymous view – fine */ }
+
+  const id = crypto.randomUUID?.() ?? `view_${Date.now()}`;
+  await query(
+    "INSERT INTO venue_views (id, venue_id, viewer_user_id) VALUES ($1, $2, $3)",
+    [id, venueId, userId],
+  );
+  return c.json({ recorded: true });
+});
 
 // POST /api/venues – business creates a venue (pending approval)
 venues.post("/", requireAuth, requireRole("business"), async (c) => {

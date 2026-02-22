@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
-import { ArrowLeft, ChevronDown, Phone } from 'lucide-react-native';
+import { ArrowLeft, ChevronDown, Phone, Globe } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CATEGORIES = [
@@ -55,6 +55,7 @@ export default function BusinessFormScreen() {
     businessName: '',
     location: '',
     phone: '',
+    website: '',
     category: '',
     services: [] as string[],
     description: '',
@@ -129,6 +130,7 @@ export default function BusinessFormScreen() {
         businessName: formData.businessName,
         location: formData.location,
         phone: formData.phone,
+        website: formData.website.trim() || undefined,
         category: formData.category,
         services: formData.services,
         description: formData.description,
@@ -468,6 +470,23 @@ export default function BusinessFormScreen() {
                 inputMode="numeric"
                 maxLength={14}
                 testID="phone-input"
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Website</Text>
+            <View style={styles.phoneInputContainer}>
+              <Globe size={20} color={theme.colors.text.secondary} style={styles.phoneIcon} />
+              <TextInput
+                style={[styles.phoneInput, { flex: 1 }]}
+                value={formData.website}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, website: text }))}
+                placeholder="https://yourvenue.com"
+                placeholderTextColor={theme.colors.text.secondary}
+                keyboardType="url"
+                autoCapitalize="none"
+                autoCorrect={false}
               />
             </View>
           </View>
