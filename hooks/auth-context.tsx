@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User, UserType, OnboardingState } from '@/types/models';
 import { safeJsonParse, clearCorruptedData, clearAllAppData, secureStorage } from '@/utils/storage';
-import { authService, type AuthUser, type UserRole } from '@/lib/auth.service';
+import { authService, type AuthUser, type UserRole, type SocialAuthProvider } from '@/lib/auth.service';
 
 interface AuthState {
   user: User | null;
@@ -20,6 +20,7 @@ interface AuthState {
   isCustomer: boolean;
 
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithProvider: (provider: SocialAuthProvider, details: { email?: string; name?: string; phone?: string; providerSubject?: string; idToken?: string; accessToken?: string }) => Promise<void>;
   signInBusiness: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string, dob: Date, phone?: string) => Promise<void>;
   signUpBusiness: (name: string, email: string, password: string, businessName: string, businessCategory?: string, phone?: string) => Promise<void>;
@@ -29,7 +30,7 @@ interface AuthState {
   forgotPassword: (email: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   verifyEmail: (token: string) => Promise<void>;
-  resendVerification: () => Promise<void>;
+  resendVerification: (emailOverride?: string) => Promise<void>;
   deleteAccount: () => Promise<void>;
   hasCompletedOnboarding: boolean;
   completeOnboarding: () => Promise<void>;
@@ -211,6 +212,9 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
         router.replace({ pathname: '/(auth)/verify-email', params: { email: appUser.email } } as any);
         return;
       }
+      setPendingVerificationEmail(null);
+      setVerificationToken(null);
+      setVerificationPreviewUrl(null);
       router.replace(routeForRole(appUser.role as UserRole) as any);
     } catch (error: any) {
       const message = error?.message?.toLowerCase?.() || '';
@@ -221,6 +225,24 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
       }
       throw error;
     }
+  }, []);
+
+  const signInWithProvider = useCallback(async (
+    provider: SocialAuthProvider,
+    details: { email?: string; name?: string; phone?: string; providerSubject?: string; idToken?: string; accessToken?: string },
+  ) => {
+    const response = await authService.loginWithProvider(provider, details);
+    const appUser = toAppUser(response.user, { phone: response.user.phone });
+    setUser(appUser);
+    setRole(response.user.role);
+    setPendingVerificationEmail(null);
+    setVerificationToken(null);
+    setVerificationPreviewUrl(null);
+    await AsyncStorage.setItem('user', JSON.stringify(appUser));
+    // Defer navigation so React commits setUser before the destination screen mounts
+    setTimeout(() => {
+      router.replace(routeForRole(response.user.role) as any);
+    }, 50);
   }, []);
 
   const signInBusiness = useCallback(async (email: string, password: string) => {
@@ -383,6 +405,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     isBusiness: role === 'business',
     isCustomer: role === 'customer',
     signIn,
+    signInWithProvider,
     signInBusiness,
     signUp,
     signUpBusiness,
@@ -406,7 +429,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     setSignInPrompt,
   }), [
     user, role, isLoading,
-    signIn, signInBusiness, signUp, signUpBusiness, signOut,
+    signIn, signInWithProvider, signInBusiness, signUp, signUpBusiness, signOut,
     updateProfile, toggleFavorite, forgotPassword, changePassword, verifyEmail, resendVerification, deleteAccount,
     hasCompletedOnboarding, completeOnboarding, onboardingState, setUserType,
     needsOnboarding, requireAuth, showSignInModal, signInPrompt,

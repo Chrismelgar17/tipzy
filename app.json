@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "tipzy",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,6 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "usesAppleSignIn": true,
       "bundleIdentifier": "app.rork.nightlife-access-app",
       "infoPlist": {
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera",
@@ -28,6 +29,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "app.rork.nightlife-access-app",
+      "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.VIBRATE",
         "CAMERA",
@@ -48,6 +50,7 @@
           "origin": "https://rork.com/"
         }
       ],
+      "expo-apple-authentication",
       [
         "expo-camera",
         {

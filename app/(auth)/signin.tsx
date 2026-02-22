@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,9 +18,17 @@ import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+import * as Linking from 'expo-linking';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { makeRedirectUri, ResponseType } from 'expo-auth-session';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
-  const { signIn, isAuthenticated } = useAuth();
+  const { signIn, signInWithProvider } = useAuth();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,12 +38,44 @@ export default function AuthScreen() {
     email?: string;
     password?: string;
   }>({});
+  const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  const expoUsername = process.env.EXPO_PUBLIC_EXPO_USERNAME;
+  const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  const googleRedirectUri = useMemo(() => {
+    if (isExpoGo && expoUsername) {
+      // Expo Auth Proxy — valid HTTPS redirect URI Google accepts
+      return `https://auth.expo.io/@${expoUsername}/nightlife-access-app`;
+    }
+    return makeRedirectUri({ scheme: 'tipzy', path: 'auth' });
+  }, [isExpoGo, expoUsername]);
+  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest(
+    googleWebClientId
+      ? {
+          clientId: (isExpoGo && expoUsername) ? googleWebClientId : undefined,
+          webClientId: googleWebClientId,
+          iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+          androidClientId: (isExpoGo && expoUsername) ? undefined : process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+          // Proxy mode uses Web client which needs client_secret for code exchange;
+          // force Token (implicit) flow to get access_token directly instead.
+          responseType: (isExpoGo && expoUsername) ? ResponseType.Token : undefined,
+          scopes: ['openid', 'profile', 'email'],
+          redirectUri: googleRedirectUri,
+        }
+      : null as any,
+  );
 
   useEffect(() => {
-    if (isAuthenticated) {
-      router.replace('/(tabs)/home');
+    if (googleResponse?.type === 'success') {
+      const idToken = googleResponse.authentication?.idToken ?? (googleResponse as any).params?.id_token;
+      const accessToken = googleResponse.authentication?.accessToken ?? (googleResponse as any).params?.access_token;
+      setIsLoading(true);
+      signInWithProvider('google', { idToken: idToken ?? undefined, accessToken: accessToken ?? undefined })
+        .catch((err: any) => Alert.alert('Google Sign In Failed', err?.message || 'Unable to sign in with Google'))
+        .finally(() => setIsLoading(false));
+    } else if (googleResponse?.type === 'error') {
+      Alert.alert('Google Sign In Failed', (googleResponse as any).error?.message || 'Authentication failed');
     }
-  }, [isAuthenticated]);
+  }, [googleResponse]);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -58,7 +98,7 @@ export default function AuthScreen() {
       newErrors.email = 'Please enter a valid phone number';
     }
     
-    if (!password.trim()) {
+    if (!usePhone && !password.trim()) {
       newErrors.password = 'Password is required';
     }
     
@@ -77,7 +117,17 @@ export default function AuthScreen() {
 
     setIsLoading(true);
     try {
-      await signIn(email, password);
+      if (usePhone) {
+        const normalizedPhone = `+1${email.replace(/\D/g, '')}`;
+        const last4 = normalizedPhone.slice(-4);
+        await signInWithProvider('phone', {
+          phone: normalizedPhone,
+          name: `Phone User ${last4}`,
+          providerSubject: normalizedPhone,
+        });
+      } else {
+        await signIn(email.trim().toLowerCase(), password);
+      }
     } catch (error: any) {
       const message = error?.message || 'Invalid credentials';
       if (message.toLowerCase().includes('network') || message.toLowerCase().includes('connection')) {
@@ -94,18 +144,73 @@ export default function AuthScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    // Mock Apple Sign In - in real app, this would use Apple's authentication
-    console.log('Apple Sign In requested');
-    Alert.alert('Demo', 'Apple Sign In would be implemented here');
+
+    setIsLoading(true);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) {
+        throw new Error('Apple did not return a valid identity token');
+      }
+      const displayName = [credential.fullName?.givenName, credential.fullName?.familyName]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
+      await signInWithProvider('apple', {
+        idToken: credential.identityToken,
+        providerSubject: credential.user,
+        name: displayName || undefined,
+        email: credential.email ?? undefined,
+      });
+    } catch (error: any) {
+      if (error?.code === 'ERR_REQUEST_CANCELED') {
+        return;
+      }
+      Alert.alert('Apple Sign In Failed', error?.message || 'Unable to sign in with Apple');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleSignIn = async () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    // Mock Google Sign In - in real app, this would use Google's authentication
-    console.log('Google Sign In requested');
-    Alert.alert('Demo', 'Google Sign In would be implemented here');
+    if (!googleWebClientId) {
+      Alert.alert('Google Sign In Not Configured', 'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to .env and restart Expo.');
+      return;
+    }
+    if (isExpoGo && !expoUsername) {
+      Alert.alert(
+        'Expo Login Required',
+        'Google Sign In in Expo Go requires an Expo account:\n\n' +
+        '1. Run in terminal: bunx expo login\n' +
+        '2. Add EXPO_PUBLIC_EXPO_USERNAME=<your-username> to .env\n' +
+        '3. Add https://auth.expo.io/@<username>/nightlife-access-app\n   to Google Console → Web client → Authorized redirect URIs'
+      );
+      return;
+    }
+    if (!googleRequest) return;
+    try {
+      if (isExpoGo && expoUsername) {
+        // Must call /start so the proxy stores the returnUrl session;
+        // otherwise auth.expo.io can't redirect back to the app.
+        const returnUrl = Linking.createURL('expo-auth-session');
+        const authUrl = await googleRequest.makeAuthUrlAsync(Google.discovery);
+        const proxyBaseUrl = `https://auth.expo.io/@${expoUsername}/nightlife-access-app`;
+        const startUrl = `${proxyBaseUrl}/start?${new URLSearchParams({ authUrl, returnUrl })}`;
+        await googlePromptAsync({ url: startUrl });
+      } else {
+        await googlePromptAsync();
+      }
+    } catch (err: any) {
+      Alert.alert('Google Sign In Failed', err?.message || 'Could not start sign in');
+    }
   };
 
   const handleSignUp = () => {
@@ -309,29 +414,35 @@ export default function AuthScreen() {
             </View>
             {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
-            <View style={[styles.inputContainer, errors.password ? styles.inputError : null]}>
-              <Lock size={20} color={theme.colors.text.tertiary} />
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your password"
-                placeholderTextColor={theme.colors.text.tertiary}
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text);
-                  setErrors(prev => ({ ...prev, password: undefined }));
-                }}
-                secureTextEntry
-                testID="password-input"
-              />
-            </View>
-            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+            {!usePhone && (
+              <>
+                <View style={[styles.inputContainer, errors.password ? styles.inputError : null]}>
+                  <Lock size={20} color={theme.colors.text.tertiary} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter your password"
+                    placeholderTextColor={theme.colors.text.tertiary}
+                    value={password}
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      setErrors(prev => ({ ...prev, password: undefined }));
+                    }}
+                    secureTextEntry
+                    testID="password-input"
+                  />
+                </View>
+                {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+              </>
+            )}
 
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={() => router.push('/forgot-password' as any)}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
+            {!usePhone && (
+              <TouchableOpacity
+                style={styles.forgotPassword}
+                onPress={() => router.push('/forgot-password' as any)}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.signInButton}
@@ -348,7 +459,7 @@ export default function AuthScreen() {
                 {isLoading ? (
                   <ActivityIndicator color={theme.colors.white} />
                 ) : (
-                  <Text style={styles.signInButtonText}>Sign In</Text>
+                  <Text style={styles.signInButtonText}>{usePhone ? 'Continue with Phone' : 'Sign In'}</Text>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -361,20 +472,25 @@ export default function AuthScreen() {
 
             <TouchableOpacity 
               style={styles.socialButton}
-              onPress={() => setUsePhone(!usePhone)}
+              onPress={() => {
+                setUsePhone(!usePhone);
+                setErrors({});
+              }}
             >
               <Text style={styles.socialButtonText}>
                 {usePhone ? 'Use Email Instead' : 'Use Phone Number'}
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.socialButton, styles.appleButton]}
-              onPress={handleAppleSignIn}
-            >
-              <Apple size={20} color={theme.colors.white} />
-              <Text style={[styles.socialButtonText, { color: theme.colors.white }]}>Continue with Apple</Text>
-            </TouchableOpacity>
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity 
+                style={[styles.socialButton, styles.appleButton]}
+                onPress={handleAppleSignIn}
+              >
+                <Apple size={20} color={theme.colors.white} />
+                <Text style={[styles.socialButtonText, { color: theme.colors.white }]}>Continue with Apple</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity 
               style={[styles.socialButton, styles.googleButton]}
@@ -392,7 +508,9 @@ export default function AuthScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.demoText}>Demo: Use any email/password to sign in</Text>
+          {!googleWebClientId && (
+            <Text style={styles.demoText}>Google Sign In requires a Web Client ID — tap the button for setup steps.</Text>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

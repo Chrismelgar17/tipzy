@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,19 +7,18 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Users, MapPin, Star, Clock, Search } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { SquareVenueCard } from '@/components/SquareVenueCard';
 import { OfferCard } from '@/components/OfferCard';
-import { mockVenues, mockOffers } from '@/mocks/venues';
+import { mockOffers } from '@/mocks/venues';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Venue, BusinessProfile } from '@/types/models';
-import { safeJsonParse, clearCorruptedData } from '@/utils/storage';
 import { useAuth } from '@/hooks/auth-context';
+import { useVenues } from '@/hooks/venues-context';
 import { SignInModal } from '@/components/SignInModal';
 
 type SortOption = 'busiest' | 'nearby' | 'top-rated' | 'open-now';
@@ -29,62 +28,8 @@ export default function HomeScreen() {
   const { showSignInModal, setShowSignInModal, signInPrompt } = useAuth();
   const [selectedSort, setSelectedSort] = useState<SortOption>('nearby');
 
+  const { venues, isLoading: venuesLoading } = useVenues();
   const [searchQuery, setSearchQuery] = useState('');
-  const [venues, setVenues] = useState<Venue[]>(mockVenues);
-  const [businessProfiles, setBusinessProfiles] = useState<BusinessProfile[]>([]);
-
-  const loadBusinessProfiles = async () => {
-    try {
-      // In a real app, this would load all business profiles from a database
-      // For now, we'll load the single business profile from AsyncStorage
-      const stored = await AsyncStorage.getItem('businessProfile');
-      const profile = safeJsonParse<BusinessProfile | null>(stored, null);
-      
-      if (profile && typeof profile === 'object' && profile.businessName) {
-        setBusinessProfiles([profile]);
-        console.log('Loaded business profiles:', [profile]);
-      } else if (stored && stored.trim()) {
-        console.warn('Invalid business profile format, clearing storage');
-        await clearCorruptedData('businessProfile');
-      }
-    } catch (error) {
-      console.error('Failed to load business profiles:', error);
-    }
-  };
-
-  const syncVenuesWithBusinessProfiles = useCallback(() => {
-    if (businessProfiles.length === 0) return;
-    
-    const updatedVenues = mockVenues.map(venue => {
-      // Find matching business profile by name or ID
-      const matchingProfile = businessProfiles.find(profile => 
-        profile.businessName.toLowerCase() === venue.name.toLowerCase() ||
-        profile.id === venue.ownerUserId
-      );
-      
-      if (matchingProfile) {
-        console.log(`Syncing venue ${venue.name} with business profile capacity: ${matchingProfile.maxCapacity}`);
-        return {
-          ...venue,
-          maxCapacity: matchingProfile.maxCapacity,
-          currentCount: matchingProfile.currentCount || 0,
-          capacity: matchingProfile.maxCapacity, // Keep both for backward compatibility
-        };
-      }
-      
-      return venue;
-    });
-    
-    setVenues(updatedVenues);
-  }, [businessProfiles]);
-
-  useEffect(() => {
-    loadBusinessProfiles();
-  }, []);
-
-  useEffect(() => {
-    syncVenuesWithBusinessProfiles();
-  }, [syncVenuesWithBusinessProfiles]);
 
   const sortOptions: { key: SortOption; label: string; icon: any }[] = [
     { key: 'busiest', label: 'Busiest', icon: Users },
@@ -252,6 +197,14 @@ export default function HomeScreen() {
         style={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* Loading indicator while fetching real venues */}
+        {venuesLoading && (
+          <View style={styles.loadingBanner}>
+            <ActivityIndicator size="small" color={theme.colors.purple} />
+            <Text style={styles.loadingText}>Loading venues…</Text>
+          </View>
+        )}
+
         {/* Featured Offers Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Featured Offers</Text>
@@ -457,6 +410,17 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  loadingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  loadingText: {
+    color: theme.colors.text.secondary,
+    fontSize: 14,
   },
   section: {
     marginTop: 24,

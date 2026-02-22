@@ -11,10 +11,10 @@ import {
 } from 'react-native';
 import { MapPin, Users, Clock, X, Heart } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
-import { mockVenues } from '@/mocks/venues';
 import { router } from 'expo-router';
 import { Venue } from '@/types/models';
 import { useAuth } from '@/hooks/auth-context';
+import { useVenues } from '@/hooks/venues-context';
 
 
 // Import NativeMapView - Metro will automatically choose the right platform file
@@ -26,6 +26,7 @@ const { height } = Dimensions.get('window');
 
 export default function MapScreen() {
   const { user, updateProfile } = useAuth();
+  const { venues } = useVenues();
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [showModal, setShowModal] = useState<boolean>(false);
   const [showInfoCard, setShowInfoCard] = useState<boolean>(false);
@@ -95,7 +96,7 @@ export default function MapScreen() {
     // Use platform-specific NativeMapView component
     return (
       <NativeMapView
-        venues={mockVenues}
+        venues={venues}
         onMarkerPress={handleMarkerPress}
         getMarkerColor={getMarkerColor}
       />

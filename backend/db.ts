@@ -16,6 +16,30 @@ export interface DbUser {
   business_category: string | null;
   business_status: "pending" | "approved" | "rejected" | null;
   email_verified?: boolean | null;
+  auth_provider?: "google" | "apple" | "phone" | null;
+  provider_subject?: string | null;
+}
+
+export interface DbVenue {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  address: string;
+  lat: number | null;
+  lng: number | null;
+  timezone: string;
+  hours: string; // JSON string
+  min_age: number;
+  dress_code: string | null;
+  capacity: number;
+  current_count: number;
+  genres: string; // JSON string
+  photos: string; // JSON string
+  price_level: number;
+  rating: number | null;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DbEmailVerification {
@@ -52,7 +76,9 @@ const initPromise = (async () => {
       business_name TEXT,
       business_category TEXT,
       business_status TEXT CHECK (business_status IN ('pending','approved','rejected')),
-      email_verified BOOLEAN NOT NULL DEFAULT false
+      email_verified BOOLEAN NOT NULL DEFAULT false,
+      auth_provider TEXT CHECK (auth_provider IN ('google','apple','phone')),
+      provider_subject TEXT
     );
 
     CREATE TABLE IF NOT EXISTS refresh_tokens (
@@ -72,10 +98,35 @@ const initPromise = (async () => {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       expires_at TIMESTAMPTZ NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS venues (
+      id TEXT PRIMARY KEY,
+      owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      address TEXT NOT NULL DEFAULT '',
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      timezone TEXT NOT NULL DEFAULT 'America/New_York',
+      hours JSONB NOT NULL DEFAULT '{}',
+      min_age INTEGER NOT NULL DEFAULT 18,
+      dress_code TEXT,
+      capacity INTEGER NOT NULL DEFAULT 100,
+      current_count INTEGER NOT NULL DEFAULT 0,
+      genres JSONB NOT NULL DEFAULT '[]',
+      photos JSONB NOT NULL DEFAULT '[]',
+      price_level INTEGER NOT NULL DEFAULT 2,
+      rating DOUBLE PRECISION,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 
   // Backfill column for existing deployments
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;");
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT;");
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_subject TEXT;");
+  await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS users_provider_subject_unique ON users (auth_provider, provider_subject) WHERE provider_subject IS NOT NULL;");
 
   await ensureAdminSeed();
 })();

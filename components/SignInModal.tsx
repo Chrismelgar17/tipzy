@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,18 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Mail, Lock, X, Sparkles, Phone, Calendar, CheckSquare, Square } from 'lucide-react-native';
+import { Mail, Lock, X, Sparkles, Phone, Calendar, CheckSquare, Square, Chrome, Apple } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
 import * as Haptics from 'expo-haptics';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+import * as Linking from 'expo-linking';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { makeRedirectUri, ResponseType } from 'expo-auth-session';
+
+WebBrowser.maybeCompleteAuthSession();
 
 interface SignInModalProps {
   visible: boolean;
@@ -26,7 +34,7 @@ interface SignInModalProps {
 }
 
 export function SignInModal({ visible, onClose, title, subtitle }: SignInModalProps) {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithProvider } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -35,6 +43,110 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
   const [confirmPassword, setConfirmPassword] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [ageConfirmed, setAgeConfirmed] = useState(false);
+
+  const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  const expoUsername = process.env.EXPO_PUBLIC_EXPO_USERNAME;
+  const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  const googleRedirectUri = useMemo(() => {
+    if (isExpoGo && expoUsername) {
+      // Expo Auth Proxy — valid HTTPS redirect URI Google accepts
+      return `https://auth.expo.io/@${expoUsername}/nightlife-access-app`;
+    }
+    return makeRedirectUri({ scheme: 'tipzy', path: 'auth' });
+  }, [isExpoGo, expoUsername]);
+  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest(
+    googleWebClientId
+      ? {
+          clientId: (isExpoGo && expoUsername) ? googleWebClientId : undefined,
+          webClientId: googleWebClientId,
+          iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+          androidClientId: (isExpoGo && expoUsername) ? undefined : process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+          // Proxy mode uses Web client which needs client_secret for code exchange;
+          // force Token (implicit) flow to get access_token directly instead.
+          responseType: (isExpoGo && expoUsername) ? ResponseType.Token : undefined,
+          scopes: ['openid', 'profile', 'email'],
+          redirectUri: googleRedirectUri,
+        }
+      : null as any,
+  );
+
+  useEffect(() => {
+    if (googleResponse?.type === 'success') {
+      const idToken = googleResponse.authentication?.idToken ?? (googleResponse as any).params?.id_token;
+      const accessToken = googleResponse.authentication?.accessToken ?? (googleResponse as any).params?.access_token;
+      setIsLoading(true);
+      signInWithProvider('google', { idToken: idToken ?? undefined, accessToken: accessToken ?? undefined })
+        .then(() => { onClose(); resetForm(); })
+        .catch((err: any) => Alert.alert('Google Sign In Failed', err?.message || 'Unable to sign in with Google'))
+        .finally(() => setIsLoading(false));
+    } else if (googleResponse?.type === 'error') {
+      Alert.alert('Google Sign In Failed', (googleResponse as any).error?.message || 'Authentication failed');
+    }
+  }, [googleResponse]);
+
+  const handleGoogleSignIn = async () => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!googleWebClientId) {
+      Alert.alert('Google Sign In Not Configured', 'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to .env and restart Expo.');
+      return;
+    }
+    if (isExpoGo && !expoUsername) {
+      Alert.alert(
+        'Expo Login Required',
+        'Google Sign In in Expo Go requires an Expo account:\n\n' +
+        '1. Run in terminal: bunx expo login\n' +
+        '2. Add EXPO_PUBLIC_EXPO_USERNAME=<your-username> to .env\n' +
+        '3. Add https://auth.expo.io/@<username>/nightlife-access-app\n   to Google Console → Web client → Authorized redirect URIs'
+      );
+      return;
+    }
+    if (!googleRequest) return;
+    try {
+      if (isExpoGo && expoUsername) {
+        // Must call /start so the proxy stores the returnUrl session;
+        // otherwise auth.expo.io can't redirect back to the app.
+        const returnUrl = Linking.createURL('expo-auth-session');
+        const authUrl = await googleRequest.makeAuthUrlAsync(Google.discovery);
+        const proxyBaseUrl = `https://auth.expo.io/@${expoUsername}/nightlife-access-app`;
+        const startUrl = `${proxyBaseUrl}/start?${new URLSearchParams({ authUrl, returnUrl })}`;
+        await googlePromptAsync({ url: startUrl });
+      } else {
+        await googlePromptAsync();
+      }
+    } catch (err: any) {
+      Alert.alert('Google Sign In Failed', err?.message || 'Could not start sign in');
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    if (Platform.OS !== 'ios') return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsLoading(true);
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) throw new Error('Apple did not return a valid identity token');
+      const displayName = [credential.fullName?.givenName, credential.fullName?.familyName].filter(Boolean).join(' ').trim();
+      await signInWithProvider('apple', {
+        idToken: credential.identityToken,
+        providerSubject: credential.user,
+        name: displayName || undefined,
+        email: credential.email ?? undefined,
+      });
+      onClose();
+      resetForm();
+    } catch (error: any) {
+      if (error?.code !== 'ERR_REQUEST_CANCELED') {
+        Alert.alert('Apple Sign In Failed', error?.message || 'Unable to sign in with Apple');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSignIn = async () => {
     if (!email || !password) {
@@ -277,23 +389,35 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
                 <View style={styles.dividerLine} />
               </View>
 
-              <TouchableOpacity 
-                style={styles.socialButton}
-                onPress={() => handleSocialSignIn('Apple')}
-              >
-                <Text style={styles.socialButtonText}>Continue with Apple</Text>
-              </TouchableOpacity>
+              {Platform.OS === 'ios' && (
+                <TouchableOpacity
+                  style={[styles.socialButton, { backgroundColor: '#000' }]}
+                  onPress={handleAppleSignIn}
+                  disabled={isLoading}
+                >
+                  <Apple size={20} color="#fff" />
+                  <Text style={[styles.socialButtonText, { color: '#fff' }]}>Continue with Apple</Text>
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.socialButton}
-                onPress={() => handleSocialSignIn('Google')}
+                onPress={handleGoogleSignIn}
+                disabled={isLoading}
               >
+                <Chrome size={20} color={theme.colors.text.primary} />
                 <Text style={styles.socialButtonText}>Continue with Google</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
                 style={styles.socialButton}
-                onPress={() => handleSocialSignIn('Phone')}
+                onPress={() => {
+                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  onClose();
+                  // Navigate to sign-in screen for phone login
+                  const { router } = require('expo-router');
+                  router.push('/(auth)/signin');
+                }}
               >
                 <Phone size={20} color={theme.colors.text.primary} />
                 <Text style={styles.socialButtonText}>Continue with Phone</Text>
@@ -319,7 +443,6 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
               </View>
             )}
             
-            <Text style={styles.demoText}>Demo: Use any email/password to sign in</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

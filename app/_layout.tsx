@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/auth-context";
 import { TicketsProvider } from "@/hooks/tickets-context";
 import { ChatProvider } from "@/hooks/chat-context";
 import { ThemeProvider, useTheme } from "@/hooks/theme-context";
+import { VenuesProvider } from "@/hooks/venues-context";
 import { StatusBar } from "expo-status-bar";
 import { ErrorBoundary } from "react-error-boundary";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
@@ -202,11 +203,13 @@ function ThemedRootLayout() {
   return (
     <GestureHandlerRootView style={rootStyles.container}>
       <AuthProvider>
-        <TicketsProvider>
-          <ChatProvider>
-            <RootLayoutNav />
-          </ChatProvider>
-        </TicketsProvider>
+        <VenuesProvider>
+          <TicketsProvider>
+            <ChatProvider>
+              <RootLayoutNav />
+            </ChatProvider>
+          </TicketsProvider>
+        </VenuesProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

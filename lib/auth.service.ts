@@ -7,6 +7,7 @@ type ApiError = AxiosError<{ error?: string; message?: string }>;
 //  Response shapes ─
 
 export type UserRole = "customer" | "business" | "admin";
+export type SocialAuthProvider = "google" | "apple" | "phone";
 
 export interface AuthUser {
   id: string;
@@ -37,6 +38,15 @@ export interface TokenRefreshResponse {
   refreshToken: string;
 }
 
+export interface ProviderAuthPayload {
+  email?: string;
+  name?: string;
+  phone?: string;
+  providerSubject?: string;
+  idToken?: string;
+  accessToken?: string;
+}
+
 //  Helpers 
 
 async function saveSession(token: string, refreshToken: string, user: AuthUser) {
@@ -63,6 +73,15 @@ export const authService = {
   login: async (email: string, password: string): Promise<AuthResponse> => {
     try {
       const { data } = await api.post<AuthResponse>("/customer/login", { email, password });
+      if (!data.token || !data.user) throw new Error("Unexpected response from server");
+      await saveSession(data.token, data.refreshToken, data.user);
+      return data;
+    } catch (e) { throw handleAuthError(e as ApiError); }
+  },
+
+  loginWithProvider: async (provider: SocialAuthProvider, payload: ProviderAuthPayload): Promise<AuthResponse> => {
+    try {
+      const { data } = await api.post<AuthResponse>("/customer/provider-auth", { provider, ...payload });
       if (!data.token || !data.user) throw new Error("Unexpected response from server");
       await saveSession(data.token, data.refreshToken, data.user);
       return data;

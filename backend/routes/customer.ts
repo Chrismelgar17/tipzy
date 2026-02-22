@@ -19,8 +19,10 @@ import {
 import { query, type DbUser, type DbEmailVerification, type DbPasswordReset } from "../db";
 import { sendPasswordResetEmail, sendVerificationEmail } from "../email";
 import { verifyAccessToken } from "../auth";
+import { verifyAppleIdentity, verifyGoogleIdentity } from "../oauth";
 
 const customer = new Hono();
+type ProviderType = "google" | "apple" | "phone";
 
 function generateVerificationToken() {
   // 6-digit numeric code
@@ -33,6 +35,13 @@ function generateVerificationToken() {
 
 function generateResetToken() {
   return crypto.randomUUID?.() ?? `reset_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function normalizePhone(phone?: string) {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return null;
+  return `+${digits}`;
 }
 
 // Register
@@ -82,6 +91,125 @@ customer.post("/register", async (c) => {
     verificationToken, // TODO: send via email provider
     mailPreviewUrl: mail.previewUrl,
   }, 201);
+});
+
+// Provider sign-in / sign-up (auto-creates verified customer accounts)
+customer.post("/provider-auth", async (c) => {
+  let body: {
+    provider?: ProviderType;
+    email?: string;
+    name?: string;
+    phone?: string;
+    providerSubject?: string;
+    idToken?: string;
+    accessToken?: string;
+  };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const provider = body.provider;
+  if (!provider || !["google", "apple", "phone"].includes(provider)) {
+    return c.json({ error: "provider must be one of: google, apple, phone" }, 400);
+  }
+
+  let normalizedEmail = body.email?.trim().toLowerCase();
+  const normalizedPhone = normalizePhone(body.phone);
+  if (provider === "phone" && !normalizedPhone) {
+    return c.json({ error: "phone is required for phone provider sign-in" }, 400);
+  }
+  let providerSubject = body.providerSubject?.trim()
+    || (provider === "phone" ? normalizedPhone : normalizedEmail);
+
+  try {
+    if (provider === "google") {
+      const identity = await verifyGoogleIdentity({ idToken: body.idToken, accessToken: body.accessToken });
+      if (!identity.email || !identity.emailVerified) {
+        return c.json({ error: "Google account email is not verified" }, 403);
+      }
+      normalizedEmail = identity.email.trim().toLowerCase();
+      providerSubject = `google:${identity.subject}`;
+    } else if (provider === "apple") {
+      const identity = await verifyAppleIdentity({ idToken: body.idToken });
+      if (!identity.emailVerified) {
+        return c.json({ error: "Apple account email is not verified" }, 403);
+      }
+      providerSubject = `apple:${identity.subject}`;
+      normalizedEmail = identity.email ? identity.email.trim().toLowerCase() : normalizedEmail;
+    }
+  } catch (error: any) {
+    return c.json({ error: error?.message ?? "Provider token verification failed" }, 401);
+  }
+
+  if (!providerSubject) return c.json({ error: "provider subject is required" }, 400);
+
+  const syntheticEmail = provider === "phone"
+    ? `phone_${(normalizedPhone ?? "").replace(/\D/g, "")}@phone.tipzy.local`
+    : undefined;
+  const identityEmail = normalizedEmail ?? syntheticEmail ?? "";
+  const displayName = body.name?.trim()
+    || (provider === "phone" ? `Phone User ${(normalizedPhone ?? "").slice(-4)}` : identityEmail.split("@")[0] || "Customer");
+
+  let user: DbUser | undefined;
+
+  // 1) Primary match: provider pair
+  const providerMatch = await query<DbUser>(
+    "SELECT * FROM users WHERE auth_provider = $1 AND provider_subject = $2 LIMIT 1",
+    [provider, providerSubject],
+  );
+  user = providerMatch.rows[0];
+
+  // 2) Fallback match by email (lets existing email/password users link providers)
+  if (!user && identityEmail) {
+    const emailMatch = await query<DbUser>("SELECT * FROM users WHERE email = $1 LIMIT 1", [identityEmail]);
+    user = emailMatch.rows[0];
+  }
+
+  if (user) {
+    if (user.role !== "customer") return c.json({ error: "Not a customer account" }, 403);
+    const updated = await query<DbUser>(
+      `UPDATE users
+       SET email_verified = true,
+           auth_provider = COALESCE(auth_provider, $1),
+           provider_subject = COALESCE(provider_subject, $2),
+           phone = COALESCE(phone, $3)
+       WHERE id = $4
+       RETURNING id, email, name, age, phone, role, created_at, email_verified`,
+      [provider, providerSubject, normalizedPhone, user.id],
+    );
+    user = updated.rows[0];
+  } else {
+    if (!identityEmail) {
+      return c.json({ error: "Provider did not return an email for first-time sign in" }, 400);
+    }
+    const id = crypto.randomUUID?.() ?? `cust_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const passwordHash = await hashPassword(crypto.randomUUID?.() ?? `${Date.now()}_${Math.random()}`);
+    const insert = await query<DbUser>(
+      `INSERT INTO users (id, email, name, password_hash, role, phone, created_at, email_verified, auth_provider, provider_subject)
+       VALUES ($1, $2, $3, $4, 'customer', $5, now(), true, $6, $7)
+       RETURNING id, email, name, age, phone, role, created_at, email_verified`,
+      [id, identityEmail, displayName, passwordHash, normalizedPhone, provider, providerSubject],
+    );
+    user = insert.rows[0];
+  }
+
+  const accessToken = await signAccessToken(user.id, user.email, "customer");
+  const refreshToken = await signRefreshToken(user.id, "customer");
+  await query("INSERT INTO refresh_tokens (token, user_id) VALUES ($1, $2)", [refreshToken, user.id]);
+
+  return c.json({
+    message: "Provider authentication successful",
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      age: user.age,
+      phone: user.phone,
+      role: "customer",
+      createdAt: user.created_at,
+      emailVerified: true,
+    },
+    token: accessToken,
+    refreshToken,
+  });
 });
 
 // Login

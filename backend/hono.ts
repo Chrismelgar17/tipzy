@@ -6,6 +6,7 @@ import { createContext } from "./trpc/create-context";
 import customerRoutes from "./routes/customer";
 import businessRoutes from "./routes/business";
 import adminRoutes from "./routes/admin";
+import venueRoutes from "./routes/venues";
 
 const app = new Hono().basePath("/api");
 
@@ -21,6 +22,7 @@ app.use("*", cors({
 app.route("/customer", customerRoutes);
 app.route("/business", businessRoutes);
 app.route("/admin", adminRoutes);
+app.route("/venues", venueRoutes);
 
 // tRPC
 app.use("/trpc/*", trpcServer({ endpoint: "/api/trpc", router: appRouter, createContext }));

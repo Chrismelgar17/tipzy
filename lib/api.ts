@@ -27,6 +27,8 @@ api.interceptors.request.use(
       console.error('[API] Error reading auth token:', error);
     }
     console.log(`[API] → ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+    // Update baseURL dynamically in case env changed
+    config.baseURL = apiConfig.apiUrl;
     return config;
   },
   (error) => Promise.reject(error),

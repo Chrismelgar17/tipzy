@@ -11,8 +11,14 @@ CREATE TABLE IF NOT EXISTS users (
   business_name TEXT,
   business_category TEXT,
   business_status TEXT CHECK (business_status IN ('pending','approved','rejected')),
-  email_verified BOOLEAN NOT NULL DEFAULT false
+  email_verified BOOLEAN NOT NULL DEFAULT false,
+  auth_provider TEXT CHECK (auth_provider IN ('google','apple','phone')),
+  provider_subject TEXT
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_provider_subject_unique
+  ON users (auth_provider, provider_subject)
+  WHERE provider_subject IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   token TEXT PRIMARY KEY,

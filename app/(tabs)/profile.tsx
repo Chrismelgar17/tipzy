@@ -30,7 +30,7 @@ import * as Haptics from 'expo-haptics';
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
-  const { user, signOut, requireAuth, emailVerified, resendVerification, pendingVerificationEmail } = useAuth();
+  const { user, signOut, requireAuth, emailVerified, resendVerification, pendingVerificationEmail, isLoading } = useAuth();
   const insets = useSafeAreaInsets();
 
   const styles = StyleSheet.create({
@@ -234,6 +234,7 @@ export default function ProfileScreen() {
 
   // If user is not authenticated, show sign-in prompt
   if (!user) {
+    if (isLoading) return null;
     return (
       <View style={[styles.container, styles.unauthenticatedContainer]}>
         <View style={styles.unauthenticatedContent}>
