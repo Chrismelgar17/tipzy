@@ -1,0 +1,38 @@
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://tipzy-production.up.railway.app",
+        "EXPO_PUBLIC_RORK_API_BASE_URL": "https://tipzy-production.up.railway.app"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "image": "latest"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://tipzy-production.up.railway.app",
+        "EXPO_PUBLIC_RORK_API_BASE_URL": "https://tipzy-production.up.railway.app"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://tipzy-production.up.railway.app",
+        "EXPO_PUBLIC_RORK_API_BASE_URL": "https://tipzy-production.up.railway.app"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

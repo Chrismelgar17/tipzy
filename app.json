@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "tipzy",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -28,14 +28,14 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.nightlife-access-app",
+      "package": "com.chrismelgar.nightlifeaccessapp",
       "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.VIBRATE",
-        "CAMERA",
-        "RECORD_AUDIO",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -68,6 +68,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": "https://tipzy-two.vercel.app"
+      },
+      "eas": {
+        "projectId": "10a82bc5-408f-4dbe-b305-5c1e8d59e321"
+      }
     }
   }
 }
