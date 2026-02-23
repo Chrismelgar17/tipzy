@@ -11,9 +11,9 @@ RUN BUN_INSTALL_IGNORE_SCRIPTS=1 bun install --production
 # Copy backend source
 COPY backend ./backend
 
-ENV PORT=3001
+# PORT is injected by Railway at runtime — do not hardcode it here
 ENV HOST=0.0.0.0
 
-EXPOSE 3001
+EXPOSE 3001 8080
 
 CMD ["bun", "backend/server.ts"]
