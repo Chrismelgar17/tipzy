@@ -187,8 +187,9 @@ const initPromise = (async () => {
   await ensureAdminSeed();
   await ensureTestCustomerSeed();
 })().catch((err) => {
-  console.error("[db] Fatal: failed to initialize database:", err?.message ?? err);
-  process.exit(1);
+  console.error("[db] DB init failed (server still running):", err?.message ?? err);
+  console.error("[db] DATABASE_URL set:", !!process.env.DATABASE_URL);
+  console.error("[db] PGSSL:", process.env.PGSSL);
 });
 
 export async function ready() {
