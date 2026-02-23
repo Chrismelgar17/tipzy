@@ -20,25 +20,21 @@ let transportPromise: Promise<TransportBundle> | null = null;
 
 async function createTransport(): Promise<TransportBundle> {
   const host = process.env.SMTP_HOST;
-  if (host) {
-    const port = Number(process.env.SMTP_PORT ?? 587);
-    const secure = process.env.SMTP_SECURE === "true" || port === 465;
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    if (!user || !pass) throw new Error("SMTP_USER and SMTP_PASS are required when SMTP_HOST is set");
-
-    const transporter = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
-    return { transporter, from: `${DEFAULT_NAME} <${DEFAULT_FROM}>`, isTest: false };
+  if (!host) {
+    console.warn("[mail] No SMTP_HOST set — emails will be skipped in production");
+    // Return a no-op transporter so the app never hangs waiting for Ethereal
+    const transporter = nodemailer.createTransport({ jsonTransport: true });
+    return { transporter, from: `${DEFAULT_NAME} <${DEFAULT_FROM}>`, isTest: true };
   }
 
-  const testAccount = await nodemailer.createTestAccount();
-  const transporter = nodemailer.createTransport({
-    host: testAccount.smtp.host,
-    port: testAccount.smtp.port,
-    secure: testAccount.smtp.secure,
-    auth: { user: testAccount.user, pass: testAccount.pass },
-  });
-  return { transporter, from: `${DEFAULT_NAME} <${DEFAULT_FROM}>`, isTest: true };
+  const port = Number(process.env.SMTP_PORT ?? 587);
+  const secure = process.env.SMTP_SECURE === "true" || port === 465;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!user || !pass) throw new Error("SMTP_USER and SMTP_PASS are required when SMTP_HOST is set");
+
+  const transporter = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
+  return { transporter, from: `${DEFAULT_NAME} <${DEFAULT_FROM}>`, isTest: false };
 }
 
 async function getTransport() {
