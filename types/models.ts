@@ -225,6 +225,8 @@ export interface BusinessProfile {
   email: string;
   businessName: string;
   location: string;
+  lat?: number;
+  lng?: number;
   phone: string;
   website?: string;
   category: string;

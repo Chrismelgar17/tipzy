@@ -77,6 +77,8 @@ business.patch("/upgrade-account", requireAuth, async (c) => {
     phone?: string;
     // venue fields
     address?: string;
+    lat?: number;
+    lng?: number;
     capacity?: number;
     minAge?: number;
     hours?: Record<string, { open: string; close: string }>;
@@ -85,7 +87,7 @@ business.patch("/upgrade-account", requireAuth, async (c) => {
   };
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
 
-  const { businessName, businessCategory, phone, address, capacity, minAge, hours, genres, photos } = body;
+  const { businessName, businessCategory, phone, address, lat, lng, capacity, minAge, hours, genres, photos } = body;
   if (!businessName) return c.json({ error: "businessName is required" }, 400);
 
   const userRes = await query<DbUser>("SELECT * FROM users WHERE id = $1", [userId]);
@@ -115,7 +117,7 @@ business.patch("/upgrade-account", requireAuth, async (c) => {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending',now(),now())`,
     [
       venueId, userId, businessName.trim(),
-      address ?? "", null, null,
+      address ?? "", lat ?? null, lng ?? null,
       "America/New_York",
       JSON.stringify(hours ?? {}),
       minAge ?? 18, null,
@@ -271,9 +273,10 @@ business.get("/venues", requireAuth, requireRole("business", "admin"), async (c)
 
   const res = await query<{
     id: string; name: string; status: string;
-    current_count: number; capacity: number; address: string; updated_at: string;
+    current_count: number; capacity: number; address: string;
+    lat: number | null; lng: number | null; updated_at: string;
   }>(
-    `SELECT id, name, status, current_count, capacity, address, updated_at
+    `SELECT id, name, status, current_count, capacity, address, lat, lng, updated_at
      FROM venues ${whereClause} ORDER BY created_at DESC`,
     params,
   );
@@ -284,6 +287,7 @@ business.get("/venues", requireAuth, requireRole("business", "admin"), async (c)
     const color = level === "packed" ? "red" : level === "busy" ? "yellow" : "green";
     return {
       id: v.id, name: v.name, address: v.address, status: v.status,
+      lat: v.lat ?? null, lng: v.lng ?? null,
       currentCount: v.current_count, maxCapacity: v.capacity,
       occupancyPct: pct, crowdLevel: level, crowdColor: color,
       updatedAt: v.updated_at,

@@ -55,6 +55,8 @@ export default function BusinessConfirmationScreen() {
         phone,
         {
           address: profile.location ?? '',
+          lat: (profile as any).lat ?? undefined,
+          lng: (profile as any).lng ?? undefined,
           capacity: profile.maxCapacity ?? 100,
           minAge: profile.minEntryAge === '21+' ? 21 : 18,
           hours,

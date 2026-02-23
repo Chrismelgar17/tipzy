@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Users } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
@@ -14,8 +14,15 @@ if (Platform.OS !== 'web') {
   Marker = maps.Marker;
 }
 
-// Dark map style for better night visibility
-const darkMapStyle = [
+// US center fallback when no valid venue coords are available
+const US_FALLBACK_REGION = {
+  latitude: 39.8283,
+  longitude: -98.5795,
+  latitudeDelta: 45,
+  longitudeDelta: 60,
+};
+
+const mapStyle = [
   {
     "elementType": "geometry",
     "stylers": [
@@ -249,14 +256,6 @@ const darkMapStyle = [
   }
 ];
 
-// Initial region for the map (centered around a typical city)
-const initialRegion = {
-  latitude: 40.7128,
-  longitude: -74.0060,
-  latitudeDelta: 0.0922,
-  longitudeDelta: 0.0421,
-};
-
 interface NativeMapViewProps {
   venues: Venue[];
   onMarkerPress: (venue: Venue) => void;
@@ -264,6 +263,24 @@ interface NativeMapViewProps {
 }
 
 export default function NativeMapView({ venues, onMarkerPress, getMarkerColor }: NativeMapViewProps) {
+  // Build list of venues that have real coordinates
+  const mappableVenues = useMemo(
+    () => venues.filter(v => v.geo && (v.geo.lat !== 0 || v.geo.lng !== 0)),
+    [venues],
+  );
+
+  // Center on the first valid venue, or fall back to the US center
+  const initialRegion = useMemo(() => {
+    if (mappableVenues.length === 0) return US_FALLBACK_REGION;
+    const first = mappableVenues[0];
+    return {
+      latitude: first.geo.lat,
+      longitude: first.geo.lng,
+      latitudeDelta: mappableVenues.length === 1 ? 0.05 : 5,
+      longitudeDelta: mappableVenues.length === 1 ? 0.05 : 8,
+    };
+  }, [mappableVenues]);
+
   // If MapView is not available (web platform), return a fallback
   if (!MapView || !Marker) {
     return (
@@ -282,33 +299,26 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor }:
         initialRegion={initialRegion}
         showsUserLocation={true}
         showsMyLocationButton={true}
+        customMapStyle={mapStyle}
         zoomEnabled={true}
         scrollEnabled={true}
         pitchEnabled={true}
         rotateEnabled={true}
       >
-        {venues.map((venue, index) => {
-          // Generate coordinates around the initial region
-          const coordinate = {
-            latitude: initialRegion.latitude + (Math.random() - 0.5) * 0.02,
-            longitude: initialRegion.longitude + (Math.random() - 0.5) * 0.02,
-          };
-          
-          return (
-            <Marker
-              key={venue.id}
-              coordinate={coordinate}
-              onPress={() => onMarkerPress(venue)}
-            >
-              <View style={[
-                styles.customMarker,
-                { backgroundColor: getMarkerColor(venue.crowdCount) }
-              ]}>
-                <Users size={16} color="white" />
-              </View>
-            </Marker>
-          );
-        })}
+        {mappableVenues.map((venue) => (
+          <Marker
+            key={venue.id}
+            coordinate={{ latitude: venue.geo.lat, longitude: venue.geo.lng }}
+            onPress={() => onMarkerPress(venue)}
+          >
+            <View style={[
+              styles.customMarker,
+              { backgroundColor: getMarkerColor(venue.crowdCount) }
+            ]}>
+              <Users size={16} color="white" />
+            </View>
+          </Marker>
+        ))}
       </MapView>
       
       {/* Legend for native map */}

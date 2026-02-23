@@ -172,6 +172,8 @@ export const authService = {
     phone?: string,
     venueData?: {
       address?: string;
+      lat?: number;
+      lng?: number;
       capacity?: number;
       minAge?: number;
       hours?: Record<string, { open: string; close: string }>;

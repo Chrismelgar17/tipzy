@@ -26,13 +26,14 @@ import { BusinessProfile, WorkHours, DayHours } from '@/types/models';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeJsonParse, clearCorruptedData } from '@/utils/storage';
+import LocationPickerMap, { PickedLocation } from '@/components/LocationPickerMap';
+import api from '@/lib/api';
 
 interface FormData {
   businessName: string;
   email: string;
   phone: string;
   website: string;
-  location: string;
   category: string;
   services: string;
   description: string;
@@ -67,14 +68,14 @@ export default function BusinessProfileScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [venueId, setVenueId] = useState<string | null>(null);
 
-  
+  const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(null);
   const [formData, setFormData] = useState<FormData>({
     businessName: '',
     email: user?.email || '',
     phone: '',
     website: '',
-    location: '',
     category: '',
     services: '',
     description: '',
@@ -101,17 +102,23 @@ export default function BusinessProfileScreen() {
       if (stored && stored.trim()) {
         const profile = safeJsonParse<BusinessProfile | null>(stored, null);
         if (profile && typeof profile === 'object' && profile.businessName) {
+          if (profile.location) {
+            setPickedLocation({
+              address: profile.location,
+              lat: profile.lat ?? 0,
+              lng: profile.lng ?? 0,
+            });
+          }
           setFormData({
-            businessName: profile.businessName,
-            email: profile.email,
-            phone: profile.phone,
+            businessName: profile.businessName ?? '',
+            email: profile.email ?? user?.email ?? '',
+            phone: profile.phone ?? '',
             website: profile.website ?? '',
-            location: profile.location,
-            category: profile.category,
-            services: profile.services.join(', '),
-            description: profile.description,
-            maxCapacity: profile.maxCapacity.toString(),
-            galleryImages: profile.galleryImages,
+            category: profile.category ?? '',
+            services: (profile.services ?? []).join(', '),
+            description: profile.description ?? '',
+            maxCapacity: profile.maxCapacity != null ? profile.maxCapacity.toString() : '',
+            galleryImages: profile.galleryImages ?? [],
             workHours: profile.workHours,
           });
         } else {
@@ -121,6 +128,25 @@ export default function BusinessProfileScreen() {
       }
     } catch (error) {
       console.error('Failed to load business profile:', error);
+    }
+
+    // Load authoritative venue location from the backend
+    try {
+      const res = await api.get<{ venues: Array<{ id: string; address: string; lat: number | null; lng: number | null }> }>('/business/venues');
+      if (res.data.venues.length > 0) {
+        const venue = res.data.venues[0];
+        setVenueId(venue.id);
+        // Always sync address from backend; treat null/0 as "no coords yet"
+        if (venue.address) {
+          setPickedLocation({
+            address: venue.address,
+            lat: venue.lat ?? 0,
+            lng: venue.lng ?? 0,
+          });
+        }
+      }
+    } catch {
+      // offline or not authenticated – keep AsyncStorage data
     }
   };
 
@@ -144,14 +170,16 @@ export default function BusinessProfileScreen() {
     try {
       const profile: BusinessProfile = {
         id: user?.id || 'business_' + Date.now(),
-        businessName: formData.businessName.trim(),
-        email: formData.email.trim(),
-        phone: formData.phone.trim(),
-        website: formData.website.trim() || undefined,
-        location: formData.location.trim(),
-        category: formData.category,
-        services: formData.services.split(',').map(s => s.trim()).filter(s => s),
-        description: formData.description.trim(),
+        businessName: (formData.businessName ?? '').trim(),
+        email: (formData.email ?? '').trim(),
+        phone: (formData.phone ?? '').trim(),
+        website: (formData.website ?? '').trim() || undefined,
+        location: pickedLocation?.address?.trim() ?? '',
+        lat: pickedLocation?.lat,
+        lng: pickedLocation?.lng,
+        category: formData.category ?? '',
+        services: (formData.services ?? '').split(',').map(s => s.trim()).filter(s => s),
+        description: (formData.description ?? '').trim(),
         maxCapacity: Number(formData.maxCapacity),
         currentCount: 0,
         galleryImages: formData.galleryImages,
@@ -163,6 +191,37 @@ export default function BusinessProfileScreen() {
       };
 
       await AsyncStorage.setItem('businessProfile', JSON.stringify(profile));
+
+      // Sync location and details to the backend venue record
+      if (venueId) {
+        try {
+          const dayAbbrev: Record<string, string> = {
+            monday: 'mon', tuesday: 'tue', wednesday: 'wed', thursday: 'thu',
+            friday: 'fri', saturday: 'sat', sunday: 'sun',
+          };
+          const venueHours = Object.entries(formData.workHours).reduce(
+            (acc, [day, val]) => {
+              if (val.isOpen) acc[dayAbbrev[day] ?? day] = { open: val.openTime, close: val.closeTime };
+              return acc;
+            },
+            {} as Record<string, { open: string; close: string }>,
+          );
+          await api.patch(`/venues/${venueId}`, {
+            name: (formData.businessName ?? '').trim(),
+            address: pickedLocation?.address?.trim() ?? '',
+            lat: pickedLocation?.lat ?? null,
+            lng: pickedLocation?.lng ?? null,
+            capacity: Number(formData.maxCapacity),
+            hours: venueHours,
+            genres: (formData.services ?? '').split(',').map((s: string) => s.trim()).filter((s: string) => s),
+            photos: formData.galleryImages,
+          });
+        } catch (err) {
+          console.warn('[BusinessProfile] Failed to sync venue with backend:', err);
+          // Don't block the user – the local save succeeded
+        }
+      }
+
       Alert.alert('Success', 'Your business profile has been updated successfully!', [
         { text: 'OK', onPress: () => router.back() }
       ]);
@@ -274,6 +333,12 @@ export default function BusinessProfileScreen() {
       fontWeight: '500',
       color: theme.colors.text.secondary,
       marginBottom: theme.spacing.sm,
+    },
+    locationHint: {
+      fontSize: 12,
+      color: theme.colors.text.secondary,
+      marginBottom: theme.spacing.sm,
+      marginTop: -4,
     },
     input: {
       borderWidth: 1,
@@ -519,13 +584,12 @@ export default function BusinessProfileScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Location</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.location}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, location: text }))}
-                placeholder="123 Main St, City, State 12345"
-                placeholderTextColor={theme.colors.text.tertiary}
+              <Text style={styles.label}>Venue Location</Text>
+              <Text style={styles.locationHint}>Tap the map or search to pin your venue's address</Text>
+              <LocationPickerMap
+                value={pickedLocation}
+                onChange={setPickedLocation}
+                theme={theme}
               />
             </View>
 

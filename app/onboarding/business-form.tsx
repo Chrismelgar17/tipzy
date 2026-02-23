@@ -14,6 +14,7 @@ import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
 import { ArrowLeft, ChevronDown, Phone, Globe } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import LocationPickerMap, { PickedLocation } from '@/components/LocationPickerMap';
 
 const CATEGORIES = [
   'Nightclub',
@@ -51,9 +52,9 @@ export default function BusinessFormScreen() {
     return null;
   }
 
+  const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(null);
   const [formData, setFormData] = useState({
     businessName: '',
-    location: '',
     phone: '',
     website: '',
     category: '',
@@ -103,9 +104,9 @@ export default function BusinessFormScreen() {
   };
 
   const handleContinue = async () => {
-    if (!formData.businessName || !formData.location || !formData.phone ||
+    if (!formData.businessName || !pickedLocation || !formData.phone ||
         !formData.category || !formData.maxCapacity || !formData.minEntryAge) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      Alert.alert('Error', 'Please fill in all required fields, including your venue location on the map');
       return;
     }
 
@@ -128,7 +129,9 @@ export default function BusinessFormScreen() {
     try {
       const businessProfile = {
         businessName: formData.businessName,
-        location: formData.location,
+        location: pickedLocation!.address,
+        lat: pickedLocation!.lat,
+        lng: pickedLocation!.lng,
         phone: formData.phone,
         website: formData.website.trim() || undefined,
         category: formData.category,
@@ -212,6 +215,12 @@ export default function BusinessFormScreen() {
     },
     required: {
       color: theme.colors.error,
+    },
+    labelHint: {
+      fontSize: 13,
+      color: theme.colors.text.secondary,
+      marginBottom: 10,
+      marginTop: -4,
     },
     input: {
       backgroundColor: theme.colors.card,
@@ -439,15 +448,13 @@ export default function BusinessFormScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              Location <Text style={styles.required}>*</Text>
+              Venue Location <Text style={styles.required}>*</Text>
             </Text>
-            <TextInput
-              style={styles.input}
-              value={formData.location}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, location: text }))}
-              placeholder="Full address"
-              placeholderTextColor={theme.colors.text.secondary}
-              testID="location-input"
+            <Text style={styles.labelHint}>Tap the map or search to pin your venue's address</Text>
+            <LocationPickerMap
+              value={pickedLocation}
+              onChange={setPickedLocation}
+              theme={theme}
             />
           </View>
 
