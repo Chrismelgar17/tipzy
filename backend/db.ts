@@ -186,7 +186,10 @@ const initPromise = (async () => {
 
   await ensureAdminSeed();
   await ensureTestCustomerSeed();
-})();
+})().catch((err) => {
+  console.error("[db] Fatal: failed to initialize database:", err?.message ?? err);
+  process.exit(1);
+});
 
 export async function ready() {
   await initPromise;
