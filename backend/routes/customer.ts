@@ -81,15 +81,22 @@ customer.post("/register", async (c) => {
     [verificationToken, user.id],
   );
 
-  const mail = await sendVerificationEmail(user.email, verificationToken);
+  let mailPreviewUrl: string | undefined;
+  try {
+    const mail = await sendVerificationEmail(user.email, verificationToken);
+    mailPreviewUrl = mail.previewUrl;
+  } catch (err: any) {
+    console.error("[register] Failed to send verification email:", err?.message ?? err);
+    // Don't block registration if email fails — user can request resend
+  }
 
   return c.json({
     message: "Customer registered successfully",
     user: { id: user.id, email: user.email, name: user.name, age: user.age, role: "customer", createdAt: user.created_at, emailVerified: user.email_verified ?? false },
     token: accessToken,
     refreshToken,
-    verificationToken, // TODO: send via email provider
-    mailPreviewUrl: mail.previewUrl,
+    verificationToken,
+    mailPreviewUrl,
   }, 201);
 });
 
@@ -336,8 +343,14 @@ customer.post("/request-password-reset", async (c) => {
     [token, user.id],
   );
 
-  const mail = await sendPasswordResetEmail(user.email, token);
-  return c.json({ message: "Password reset requested", resetToken: token, mailPreviewUrl: mail.previewUrl });
+  let mailPreviewUrl: string | undefined;
+  try {
+    const mail = await sendPasswordResetEmail(user.email, token);
+    mailPreviewUrl = mail.previewUrl;
+  } catch (err: any) {
+    console.error("[forgot-password] Failed to send reset email:", err?.message ?? err);
+  }
+  return c.json({ message: "Password reset requested", resetToken: token, mailPreviewUrl });
 });
 
 // Reset password using token
@@ -399,8 +412,14 @@ customer.post("/request-verification", async (c) => {
     "INSERT INTO email_verifications (token, user_id, expires_at) VALUES ($1, $2, now() + interval '24 hours')",
     [token, user.id],
   );
-  const mail = await sendVerificationEmail(user.email, token);
-  return c.json({ message: "Verification email requested", verificationToken: token, mailPreviewUrl: mail.previewUrl });
+  let mailPreviewUrl: string | undefined;
+  try {
+    const mail = await sendVerificationEmail(user.email, token);
+    mailPreviewUrl = mail.previewUrl;
+  } catch (err: any) {
+    console.error("[resend-verification] Failed to send email:", err?.message ?? err);
+  }
+  return c.json({ message: "Verification email requested", verificationToken: token, mailPreviewUrl });
 });
 
 // Verify email with token
