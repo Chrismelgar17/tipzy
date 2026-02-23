@@ -24,12 +24,13 @@ const styles = StyleSheet.create({
 
 export default function BusinessTabLayout() {
   const { isAuthenticated, isLoading, isBusiness, isAdmin } = useAuth();
+  // isBusiness is only true when businessStatus === 'approved'
   const canAccess = isBusiness || isAdmin;
 
   if (isLoading) return null;
 
   if (!isAuthenticated || !canAccess) {
-    return <Redirect href="/(auth)/signin" />;
+    return <Redirect href="/(tabs)/home" />;
   }
 
   return (

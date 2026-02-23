@@ -285,7 +285,13 @@ customer.get("/me", requireAuth, async (c) => {
   const res = await query<DbUser>("SELECT * FROM users WHERE id = $1", [userId]);
   const user = res.rows[0];
   if (!user) return c.json({ error: "User not found" }, 404);
-  return c.json({ id: user.id, name: user.name, email: user.email, age: user.age, phone: user.phone, role: user.role, createdAt: user.created_at, emailVerified: user.email_verified ?? false });
+  return c.json({
+    id: user.id, name: user.name, email: user.email, age: user.age, phone: user.phone,
+    role: user.role, createdAt: user.created_at, emailVerified: user.email_verified ?? false,
+    businessName: user.business_name ?? undefined,
+    businessCategory: user.business_category ?? undefined,
+    businessStatus: user.business_status ?? undefined,
+  });
 });
 
 // Change password

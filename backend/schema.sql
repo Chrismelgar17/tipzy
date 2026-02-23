@@ -109,6 +109,13 @@ CREATE TABLE IF NOT EXISTS venue_views (
 
 CREATE INDEX IF NOT EXISTS venue_views_venue_idx ON venue_views (venue_id, viewed_at DESC);
 
+-- One-time tokens for email-based business approval
+CREATE TABLE IF NOT EXISTS business_approval_tokens (
+  token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Seed admin (optional if not present)
 INSERT INTO users (id, email, name, password_hash, role)
 VALUES ('admin_seed', 'admin@tipzy.app', 'Tipzy Admin', '__PENDING__', 'admin')

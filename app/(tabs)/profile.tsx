@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  Clock,
   Heart,
   Settings,
   CreditCard,
@@ -30,7 +31,7 @@ import * as Haptics from 'expo-haptics';
 
 export default function ProfileScreen() {
   const { theme } = useTheme();
-  const { user, signOut, requireAuth, emailVerified, resendVerification, pendingVerificationEmail, isLoading, isBusiness } = useAuth();
+  const { user, signOut, requireAuth, emailVerified, resendVerification, pendingVerificationEmail, isLoading, isBusiness, businessStatus } = useAuth();
   const insets = useSafeAreaInsets();
 
   const styles = StyleSheet.create({
@@ -257,11 +258,25 @@ export default function ProfileScreen() {
   const menuItems = [
     {
       icon: Building2,
-      label: isBusiness ? 'My Business Dashboard' : 'Register Your Venue',
-      value: isBusiness ? 'Manage your venue' : 'Business owners',
-      onPress: () => isBusiness
-        ? router.replace('/(business-tabs)/dashboard' as any)
-        : router.push('/onboarding/business-form' as any),
+      label: isBusiness
+        ? 'My Business Dashboard'
+        : businessStatus === 'pending'
+          ? 'Business Approval Pending'
+          : 'Register Your Venue',
+      value: isBusiness
+        ? 'Manage your venue'
+        : businessStatus === 'pending'
+          ? 'Awaiting admin review'
+          : 'Business owners',
+      onPress: () => {
+        if (isBusiness) {
+          router.replace('/(business-tabs)/dashboard' as any);
+        } else if (businessStatus === 'pending') {
+          // Already submitted — inform the user
+        } else {
+          router.push('/onboarding/business-form' as any);
+        }
+      },
     },
     {
       icon: Heart,
@@ -367,6 +382,32 @@ export default function ProfileScreen() {
           </View>
         </View>
       </View>
+
+      {/* Pending business approval banner */}
+      {businessStatus === 'pending' && (
+        <View style={{
+          marginHorizontal: theme.spacing.lg,
+          marginTop: theme.spacing.md,
+          backgroundColor: 'rgba(124, 58, 237, 0.12)',
+          borderWidth: 1,
+          borderColor: 'rgba(124, 58, 237, 0.35)',
+          borderRadius: theme.borderRadius.md,
+          padding: theme.spacing.md,
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          gap: theme.spacing.sm,
+        }}>
+          <Clock size={18} color={theme.colors.purple} style={{ marginTop: 1 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.colors.purple, fontWeight: '700', fontSize: 14, marginBottom: 4 }}>
+              Business Approval Pending
+            </Text>
+            <Text style={{ color: theme.colors.text.secondary, fontSize: 13, lineHeight: 18 }}>
+              Your business registration is under review. You'll gain access to the business dashboard once approved by the Tipzy team.
+            </Text>
+          </View>
+        </View>
+      )}
 
       {(user?.role === 'clubAdmin' || user?.role === 'superAdmin') && (
         <View style={styles.adminSection}>

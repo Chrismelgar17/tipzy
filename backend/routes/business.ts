@@ -24,6 +24,7 @@ import {
   requireRole,
 } from "../auth";
 import { query, type DbUser, type DbOrder, type DbVenue } from "../db";
+import { sendBusinessApprovalRequestEmail, type BusinessApprovalData } from "../email";
 
 const business = new Hono();
 
@@ -58,6 +59,33 @@ business.post("/register", async (c) => {
   const accessToken = await signAccessToken(user.id, user.email, "business");
   const refreshToken = await signRefreshToken(user.id, "business");
   await query("INSERT INTO refresh_tokens (token, user_id) VALUES ($1, $2)", [refreshToken, user.id]);
+
+  // Generate a one-click approval token and notify Tipzy admin
+  try {
+    const approvalToken = crypto.randomUUID?.() ?? `bat_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    await query(
+      "INSERT INTO business_approval_tokens (token, user_id) VALUES ($1, $2)",
+      [approvalToken, id],
+    );
+    const apiBase = process.env.API_BASE_URL ?? process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+    const approvalUrl = `${apiBase}/api/admin/approve-business/${approvalToken}`;
+    const approvalData: BusinessApprovalData = {
+      userId: id,
+      ownerName: name.trim(),
+      ownerEmail: normalised,
+      businessName,
+      businessCategory: businessCategory ?? null,
+      phone: phone ?? null,
+      address: null,
+      capacity: null,
+      minAge: null,
+      genres: null,
+      createdAt: user.created_at,
+    };
+    await sendBusinessApprovalRequestEmail(approvalData, approvalUrl);
+  } catch (emailErr) {
+    console.error("[business/register] Failed to send approval email:", emailErr);
+  }
 
   return c.json({
     message: "Business registered successfully. Account pending approval.",
@@ -133,6 +161,34 @@ business.patch("/upgrade-account", requireAuth, async (c) => {
   const accessToken = await signAccessToken(updatedUser.id, updatedUser.email, "business");
   const refreshToken = await signRefreshToken(updatedUser.id, "business");
   await query("INSERT INTO refresh_tokens (token, user_id) VALUES ($1, $2)", [refreshToken, userId]);
+
+  // Generate a one-click approval token and notify Tipzy admin
+  try {
+    const approvalToken = crypto.randomUUID?.() ?? `bat_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    await query("DELETE FROM business_approval_tokens WHERE user_id = $1", [userId]);
+    await query(
+      "INSERT INTO business_approval_tokens (token, user_id) VALUES ($1, $2)",
+      [approvalToken, userId],
+    );
+    const apiBase = process.env.API_BASE_URL ?? process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+    const approvalUrl = `${apiBase}/api/admin/approve-business/${approvalToken}`;
+    const approvalData: BusinessApprovalData = {
+      userId,
+      ownerName: updatedUser.name,
+      ownerEmail: updatedUser.email,
+      businessName: businessName,
+      businessCategory: businessCategory ?? null,
+      phone: phone ?? updatedUser.phone ?? null,
+      address: address ?? null,
+      capacity: capacity ?? null,
+      minAge: minAge ?? null,
+      genres: genres ?? null,
+      createdAt: updatedUser.created_at,
+    };
+    await sendBusinessApprovalRequestEmail(approvalData, approvalUrl);
+  } catch (emailErr) {
+    console.error("[business/upgrade-account] Failed to send approval email:", emailErr);
+  }
 
   return c.json({
     message: "Account upgraded to business. Pending admin approval.",

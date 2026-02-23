@@ -170,6 +170,12 @@ const initPromise = (async () => {
       count_after INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    CREATE TABLE IF NOT EXISTS business_approval_tokens (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 
   // Backfill column for existing deployments

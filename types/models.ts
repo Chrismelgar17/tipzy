@@ -6,11 +6,13 @@ export interface User {
   dob?: Date;
   favorites: string[];
   createdAt: Date;
-  role: 'user' | 'clubAdmin' | 'superAdmin' | 'business';
+  role: 'user' | 'clubAdmin' | 'superAdmin' | 'business' | 'admin';
   hasCompletedOnboarding?: boolean;
   phone?: string;
   bio?: string;
   emailVerified?: boolean;
+  /** Only present when role === 'business' */
+  businessStatus?: 'pending' | 'approved' | 'rejected';
 }
 
 /** Traffic-light crowd colour shown in cards and the customer map */

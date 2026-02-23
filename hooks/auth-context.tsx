@@ -19,6 +19,8 @@ interface AuthState {
   isAdmin: boolean;
   isBusiness: boolean;
   isCustomer: boolean;
+  /** 'pending' | 'approved' | 'rejected' | null – only meaningful when role === 'business' */
+  businessStatus: 'pending' | 'approved' | 'rejected' | null;
 
   signIn: (email: string, password: string) => Promise<void>;
   signInWithProvider: (provider: SocialAuthProvider, details: { email?: string; name?: string; phone?: string; providerSubject?: string; idToken?: string; accessToken?: string }) => Promise<void>;
@@ -60,12 +62,12 @@ interface AuthState {
 
 //  Role  route 
 
-function routeForRole(role: UserRole | undefined) {
-  switch (role) {
-    case 'admin':    return '/admin';
-    case 'business': return '/(business-tabs)/dashboard';
-    default:         return '/(tabs)/profile';
+function routeForRole(role: UserRole | undefined, businessStatus?: string) {
+  if (role === 'admin') return '/admin';
+  if (role === 'business') {
+    return businessStatus === 'approved' ? '/(business-tabs)/dashboard' : '/(tabs)/home';
   }
+  return '/(tabs)/home';
 }
 
 //  Map AuthUser  app User 
@@ -81,6 +83,7 @@ function toAppUser(apiUser: AuthUser, extra?: Partial<User>): User {
     role: apiUser.role === 'admin' ? 'admin' : apiUser.role === 'business' ? 'business' : 'user',
     emailVerified: apiUser.emailVerified ?? false,
     hasCompletedOnboarding: false,
+    businessStatus: apiUser.businessStatus,
     ...extra,
   };
 }
@@ -126,18 +129,20 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
           const stored = await authService.getStoredUser();
           if (stored) {
             let mapped = toAppUser(stored);
-            // If emailVerified is missing/false, fetch fresh profile to avoid stale verification state
-            if (!mapped.emailVerified) {
-              try {
-                const fresh = await authService.getProfile();
-                mapped = toAppUser(fresh);
-                await secureStorage.saveUserData(fresh);
-              } catch {
-                // If profile fails, fall back to stored
+            // Always fetch fresh profile so server-side changes (e.g. business approval,
+            // email verification) are reflected immediately on app startup.
+            try {
+              const fresh = await authService.getProfile();
+              mapped = toAppUser(fresh);
+              await secureStorage.saveUserData(fresh);
+            } catch {
+              // If profile fetch fails, fall back to stored data
+              if (!mapped.emailVerified) {
+                setPendingVerificationEmail(mapped.email);
               }
             }
             setUser(mapped);
-            setRole(stored.role);
+            setRole(mapped.role as UserRole);
             if (!mapped.emailVerified) setPendingVerificationEmail(mapped.email);
             return;
           }
@@ -240,7 +245,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
       setPendingVerificationEmail(null);
       setVerificationToken(null);
       setVerificationPreviewUrl(null);
-      router.replace(routeForRole(appUser.role as UserRole) as any);
+      router.replace(routeForRole(appUser.role as UserRole, appUser.businessStatus) as any);
     } catch (error: any) {
       const message = error?.message?.toLowerCase?.() || '';
       if (message.includes('verify')) {
@@ -266,7 +271,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     await AsyncStorage.setItem('user', JSON.stringify(appUser));
     // Defer navigation so React commits setUser before the destination screen mounts
     setTimeout(() => {
-      router.replace(routeForRole(response.user.role) as any);
+      router.replace(routeForRole(response.user.role, response.user.businessStatus) as any);
     }, 50);
   }, []);
 
@@ -279,7 +284,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     setUser(appUser);
     setRole(response.user.role);
     await AsyncStorage.setItem('user', JSON.stringify(appUser));
-    router.replace(routeForRole(response.user.role) as any);
+    router.replace(routeForRole(response.user.role, response.user.businessStatus) as any);
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, name: string, dob: Date, phone?: string) => {
@@ -321,7 +326,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
       router.replace({ pathname: '/(auth)/verify-email', params: { email: appUser.email } } as any);
       return;
     }
-    router.replace(routeForRole(response.user.role) as any);
+    router.replace(routeForRole(response.user.role, response.user.businessStatus) as any);
   }, []);
 
   const upgradeAccountToBusiness = useCallback(async (
@@ -357,10 +362,10 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     setUser(appUser);
     setRole('business');
     await AsyncStorage.setItem('user', JSON.stringify(appUser));
-    // Defer navigation so React commits setRole('business') before the
-    // business layout mounts and checks isBusiness — same pattern as signInWithProvider
+    // Business is always 'pending' right after upgrade — route to user tabs.
+    // The business dashboard becomes available after admin approval on next sign-in.
     setTimeout(() => {
-      router.replace('/(business-tabs)/dashboard' as any);
+      router.replace('/(tabs)/home' as any);
     }, 50);
   }, []);
 
@@ -407,7 +412,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     setVerificationToken(null);
     setVerificationPreviewUrl(null);
     await AsyncStorage.setItem('user', JSON.stringify(mapped));
-    router.replace(routeForRole(profile.role) as any);
+    router.replace(routeForRole(profile.role, profile.businessStatus) as any);
   }, []);
 
   const resendVerification = useCallback(async (emailOverride?: string) => {
@@ -470,8 +475,9 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     isLoading,
     isAuthenticated: !!user,
     isAdmin:    role === 'admin',
-    isBusiness: role === 'business',
-    isCustomer: role === 'customer',
+    isBusiness: role === 'business' && user?.businessStatus === 'approved',
+    isCustomer: role === 'customer' || (role === 'business' && user?.businessStatus !== 'approved'),
+    businessStatus: (user?.businessStatus ?? null) as 'pending' | 'approved' | 'rejected' | null,
     signIn,
     signInWithProvider,
     signInBusiness,
