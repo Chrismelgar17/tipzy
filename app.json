@@ -47,7 +47,7 @@
       [
         "expo-router",
         {
-          "origin": "https://rork.com/"
+          "origin": "https://tipzy-two.vercel.app"
         }
       ],
       "expo-apple-authentication",
