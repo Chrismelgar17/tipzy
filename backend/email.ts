@@ -44,7 +44,10 @@ async function getTransport() {
 
 export async function sendEmail(opts: { to: string; subject: string; text: string; html?: string }): Promise<MailResult> {
   const transport = await getTransport();
-  const info = await transport.transporter.sendMail({ from: transport.from, to: opts.to, subject: opts.subject, text: opts.text, html: opts.html });
+  // Hard 5s timeout — never block the caller longer than this
+  const sendPromise = transport.transporter.sendMail({ from: transport.from, to: opts.to, subject: opts.subject, text: opts.text, html: opts.html });
+  const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Email send timeout")), 5000));
+  const info = await Promise.race([sendPromise, timeoutPromise]);
   const previewUrl = transport.isTest ? nodemailer.getTestMessageUrl(info) ?? undefined : undefined;
   if (previewUrl) console.log(`[mail] Preview ${opts.subject}: ${previewUrl}`);
   return { messageId: info.messageId, previewUrl };
