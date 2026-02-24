@@ -10,10 +10,11 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
-import { CheckCircle, Clock, Mail } from 'lucide-react-native';
+import { CheckCircle, Clock, Mail, ArrowLeft } from 'lucide-react-native';
 
 export default function BusinessConfirmationScreen() {
   const { theme } = useTheme();
@@ -179,6 +180,20 @@ export default function BusinessConfirmationScreen() {
       fontWeight: '600' as const,
       color: theme.colors.white,
     },
+    backButton: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: 12,
+      padding: 16,
+      alignItems: 'center',
+      marginTop: 12,
+      width: '100%',
+    },
+    backButtonText: {
+      fontSize: 16,
+      fontWeight: '500' as const,
+      color: theme.colors.text.secondary,
+    },
     note: {
       backgroundColor: `${theme.colors.warning}20`,
       borderRadius: 12,
@@ -196,6 +211,19 @@ export default function BusinessConfirmationScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          headerTitle: 'Registration',
+          headerStyle: { backgroundColor: theme.colors.background },
+          headerTintColor: theme.colors.text.primary,
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: 8 }}>
+              <ArrowLeft size={22} color={theme.colors.text.primary} />
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.scrollContent}>
           <View style={styles.iconContainer}>
@@ -263,6 +291,14 @@ export default function BusinessConfirmationScreen() {
             ) : (
               <Text style={styles.finishButtonText}>Complete Registration</Text>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.replace('/(tabs)/home' as any)}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.backButtonText}>Go to Home</Text>
           </TouchableOpacity>
 
           <View style={styles.note}>
