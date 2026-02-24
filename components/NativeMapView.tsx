@@ -353,12 +353,6 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, u
           const { latitude, longitude } = event.nativeEvent.coordinate;
           console.log('User location updated:', latitude, longitude);
         }}
-        showsMyLocationButton={false}
-        customMapStyle={mapStyle}
-        zoomEnabled={true}
-        scrollEnabled={true}
-        pitchEnabled={true}
-        rotateEnabled={true}
       >
         {/* Custom user location marker */}
         {userLocation && (
