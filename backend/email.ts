@@ -1,57 +1,66 @@
 /**
- * Minimal mail helper using Nodemailer. Falls back to an Ethereal test
- * account when SMTP credentials are not provided, so we can preview
- * emails during development without sending real mail.
+ * Mail helper using Nodemailer + Gmail SMTP.
+ * Railway only blocks port 25 — ports 587 (STARTTLS) and 465 (SSL) work fine.
+ *
+ * Required env vars:
+ *   GMAIL_USER  — the Gmail address to send from (e.g. tipzy.team@gmail.com)
+ *   GMAIL_PASS  — a Gmail App Password (NOT your real password)
+ *
+ * How to create a Gmail App Password:
+ *   1. Go to myaccount.google.com → Security → 2-Step Verification (must be ON)
+ *   2. Search "App passwords" → create one named "Tipzy Railway"
+ *   3. Copy the 16-char password and set it as GMAIL_PASS in Railway Variables
+ *
+ * If GMAIL_USER / GMAIL_PASS are not set, emails are skipped gracefully.
  */
 import nodemailer from "nodemailer";
 
-const DEFAULT_FROM = process.env.MAIL_FROM ?? "tipzy.team@gmail.com";
 const DEFAULT_NAME = process.env.MAIL_FROM_NAME ?? "Tipzy";
 
-type MailResult = { messageId: string; previewUrl?: string };
+type MailResult = { messageId: string };
 
-type TransportBundle = {
-  transporter: nodemailer.Transporter;
-  from: string;
-  isTest: boolean;
-};
+let transporterCache: nodemailer.Transporter | null | undefined = undefined;
 
-let transportPromise: Promise<TransportBundle> | null = null;
+function getTransporter(): nodemailer.Transporter | null {
+  if (transporterCache !== undefined) return transporterCache;
 
-async function createTransport(): Promise<TransportBundle> {
-  const host = process.env.SMTP_HOST;
-  if (!host) {
-    console.warn("[mail] No SMTP_HOST set — emails will be skipped in production");
-    // Return a no-op transporter so the app never hangs waiting for Ethereal
-    const transporter = nodemailer.createTransport({ jsonTransport: true });
-    return { transporter, from: `${DEFAULT_NAME} <${DEFAULT_FROM}>`, isTest: true };
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_PASS;
+
+  if (!user || !pass) {
+    console.warn("[mail] GMAIL_USER / GMAIL_PASS not set — emails will be skipped");
+    transporterCache = null;
+    return null;
   }
 
-  const port = Number(process.env.SMTP_PORT ?? 587);
-  const secure = process.env.SMTP_SECURE === "true" || port === 465;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!user || !pass) throw new Error("SMTP_USER and SMTP_PASS are required when SMTP_HOST is set");
+  transporterCache = nodemailer.createTransport({
+    service: "gmail",
+    auth: { user, pass },
+  });
 
-  const transporter = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
-  return { transporter, from: `${DEFAULT_NAME} <${DEFAULT_FROM}>`, isTest: false };
-}
-
-async function getTransport() {
-  if (!transportPromise) transportPromise = createTransport();
-  return transportPromise;
+  console.log(`[mail] Gmail SMTP ready — sending as ${user}`);
+  return transporterCache;
 }
 
 export async function sendEmail(opts: { to: string; subject: string; text: string; html?: string }): Promise<MailResult> {
-  const transport = await getTransport();
-  // Hard 5s timeout — never block the caller longer than this
-  const sendPromise = transport.transporter.sendMail({ from: transport.from, to: opts.to, subject: opts.subject, text: opts.text, html: opts.html });
-  const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Email send timeout")), 5000));
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.warn(`[mail] Skipping email to ${opts.to}: "${opts.subject}"`);
+    return { messageId: "skipped" };
+  }
+
+  const from = `${DEFAULT_NAME} <${process.env.GMAIL_USER}>`;
+
+  const sendPromise = transporter.sendMail({ from, to: opts.to, subject: opts.subject, text: opts.text, html: opts.html });
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("Email send timeout after 10s")), 10_000)
+  );
+
   const info = await Promise.race([sendPromise, timeoutPromise]);
-  const previewUrl = transport.isTest ? nodemailer.getTestMessageUrl(info) ?? undefined : undefined;
-  if (previewUrl) console.log(`[mail] Preview ${opts.subject}: ${previewUrl}`);
-  return { messageId: info.messageId, previewUrl };
+  console.log(`[mail] Sent "${opts.subject}" to ${opts.to} — id: ${info.messageId}`);
+  return { messageId: info.messageId };
 }
+
 
 export async function sendVerificationEmail(to: string, token: string) {
   const subject = "Tipzy: Verify your email";
