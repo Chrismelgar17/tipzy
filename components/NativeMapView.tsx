@@ -454,19 +454,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 75, 75, 0.5)',
   },
   userLocationDot: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FF4B4B',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'red', // Change the color to red
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 6,
-    shadowColor: '#FF4B4B',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
   },
   legend: {
     position: 'absolute',
