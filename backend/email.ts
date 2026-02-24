@@ -1,17 +1,14 @@
 /**
  * Mail helper using Nodemailer + Gmail SMTP.
- * Railway only blocks port 25 — ports 587 (STARTTLS) and 465 (SSL) work fine.
+ * Uses SMTP_USER / SMTP_PASS (Gmail App Password) from env.
  *
  * Required env vars:
- *   GMAIL_USER  — the Gmail address to send from (e.g. tipzy.team@gmail.com)
- *   GMAIL_PASS  — a Gmail App Password (NOT your real password)
+ *   SMTP_USER  — Gmail address (e.g. tipzy.team@gmail.com)
+ *   SMTP_PASS  — Gmail App Password (16-char, spaces optional)
+ *   MAIL_FROM  — Sender address (defaults to SMTP_USER)
+ *   MAIL_FROM_NAME — Display name (defaults to "Tipzy")
  *
- * How to create a Gmail App Password:
- *   1. Go to myaccount.google.com → Security → 2-Step Verification (must be ON)
- *   2. Search "App passwords" → create one named "Tipzy Railway"
- *   3. Copy the 16-char password and set it as GMAIL_PASS in Railway Variables
- *
- * If GMAIL_USER / GMAIL_PASS are not set, emails are skipped gracefully.
+ * If SMTP_USER / SMTP_PASS are not set, emails are skipped gracefully.
  */
 import nodemailer from "nodemailer";
 
@@ -24,11 +21,11 @@ let transporterCache: nodemailer.Transporter | null | undefined = undefined;
 function getTransporter(): nodemailer.Transporter | null {
   if (transporterCache !== undefined) return transporterCache;
 
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_PASS;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
 
   if (!user || !pass) {
-    console.warn("[mail] GMAIL_USER / GMAIL_PASS not set — emails will be skipped");
+    console.warn("[mail] SMTP_USER / SMTP_PASS not set — emails will be skipped");
     transporterCache = null;
     return null;
   }
@@ -49,7 +46,8 @@ export async function sendEmail(opts: { to: string; subject: string; text: strin
     return { messageId: "skipped" };
   }
 
-  const from = `${DEFAULT_NAME} <${process.env.GMAIL_USER}>`;
+  const senderAddress = process.env.MAIL_FROM ?? process.env.SMTP_USER;
+  const from = `${DEFAULT_NAME} <${senderAddress}>`;
 
   const sendPromise = transporter.sendMail({ from, to: opts.to, subject: opts.subject, text: opts.text, html: opts.html });
   const timeoutPromise = new Promise<never>((_, reject) =>
@@ -60,6 +58,7 @@ export async function sendEmail(opts: { to: string; subject: string; text: strin
   console.log(`[mail] Sent "${opts.subject}" to ${opts.to} — id: ${info.messageId}`);
   return { messageId: info.messageId };
 }
+
 
 
 export async function sendVerificationEmail(to: string, token: string) {
