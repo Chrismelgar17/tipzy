@@ -348,7 +348,11 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, u
       <MapView
         style={styles.map}
         initialRegion={initialRegion}
-        showsUserLocation={false}
+        showsUserLocation={true}
+        onUserLocationChange={(event) => {
+          const { latitude, longitude } = event.nativeEvent.coordinate;
+          console.log('User location updated:', latitude, longitude);
+        }}
         showsMyLocationButton={false}
         customMapStyle={mapStyle}
         zoomEnabled={true}

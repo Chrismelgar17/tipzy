@@ -723,6 +723,7 @@ export default function SignUpScreen() {
                 onChange={handleDateChange}
                 maximumDate={new Date()}
                 minimumDate={new Date(1900, 0, 1)}
+                textColor="#FFFFFF"
                 style={styles.datePicker}
               />
             </View>

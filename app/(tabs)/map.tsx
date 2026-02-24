@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import { router } from 'expo-router';
 import { Venue } from '@/types/models';
 import { useAuth } from '@/hooks/auth-context';
 import { useVenues } from '@/hooks/venues-context';
-
+import * as Location from 'expo-location';
 
 // Import NativeMapView - Metro will automatically choose the right platform file
 import NativeMapView from '@/components/NativeMapView';
@@ -31,6 +31,16 @@ export default function MapScreen() {
   const [showModal, setShowModal] = useState<boolean>(false);
   const [showInfoCard, setShowInfoCard] = useState<boolean>(false);
   const [favorites, setFavorites] = useState<string[]>(user?.favorites || []);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+    })();
+  }, []);
 
   const handleMarkerPress = (venue: Venue) => {
     setSelectedVenue(venue);
@@ -99,6 +109,7 @@ export default function MapScreen() {
         venues={venues}
         onMarkerPress={handleMarkerPress}
         getMarkerColor={getMarkerColor}
+        userLocation={userLocation}
       />
     );
   };
