@@ -13,18 +13,19 @@ import { Stack } from 'expo-router';
 import { Heart, MapPin, Star, Trash2, Search, Filter, SortAsc } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
+import { useVenues } from '@/hooks/venues-context';
 import { Venue } from '@/types/models';
-import { mockVenues } from '@/mocks/venues';
 import { router } from 'expo-router';
 
 export default function FavoritesScreen() {
   const { user, updateProfile } = useAuth();
+  const { venues } = useVenues();
   const [favorites, setFavorites] = useState<string[]>(user?.favorites || []);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'rating' | 'distance'>('name');
 
   const favoriteVenues = useMemo(() => {
-    let filtered = mockVenues.filter((venue: Venue) => favorites.includes(venue.id));
+    let filtered = venues.filter((venue: Venue) => favorites.includes(venue.id));
     
     // Apply search filter
     if (searchQuery.trim()) {

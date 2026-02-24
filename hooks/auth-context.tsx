@@ -141,6 +141,14 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
                 setPendingVerificationEmail(mapped.email);
               }
             }
+            // Restore favorites from local AsyncStorage cache (not in AuthUser shape)
+            try {
+              const raw = await AsyncStorage.getItem('user');
+              const cached = safeJsonParse<User | null>(raw, null);
+              if (cached?.favorites?.length) {
+                mapped = { ...mapped, favorites: cached.favorites };
+              }
+            } catch { /* ignore */ }
             setUser(mapped);
             setRole(mapped.role as UserRole);
             if (!mapped.emailVerified) setPendingVerificationEmail(mapped.email);
