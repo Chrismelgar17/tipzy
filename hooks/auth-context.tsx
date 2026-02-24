@@ -78,6 +78,8 @@ function toAppUser(apiUser: AuthUser, extra?: Partial<User>): User {
     email: apiUser.email,
     name: apiUser.name,
     phone: apiUser.phone,
+    avatarUrl: apiUser.avatarUrl,
+    bio: (apiUser as any).bio,
     favorites: [],
     createdAt: new Date(apiUser.createdAt),
     role: apiUser.role === 'admin' ? 'admin' : apiUser.role === 'business' ? 'business' : 'user',
@@ -390,6 +392,19 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     const updated = { ...user, ...updates };
     setUser(updated);
     await AsyncStorage.setItem('user', JSON.stringify(updated));
+    // Sync to backend if it's a real user field
+    try {
+      if (updates.name !== undefined || updates.phone !== undefined || updates.bio !== undefined || updates.avatarUrl !== undefined) {
+        await authService.updateUserProfile({
+          name: updates.name,
+          phone: updates.phone,
+          bio: updates.bio,
+          avatarUrl: updates.avatarUrl,
+        });
+      }
+    } catch (e) {
+      console.warn('[Auth] updateProfile sync failed:', e);
+    }
   }, [user]);
 
   const toggleFavorite = useCallback((venueId: string) => {

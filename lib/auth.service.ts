@@ -18,6 +18,8 @@ export interface AuthUser {
   role: UserRole;
   createdAt: string;
   emailVerified?: boolean;
+  avatarUrl?: string;
+  bio?: string;
   // Business-specific
   businessName?: string;
   businessCategory?: string;
@@ -115,6 +117,14 @@ export const authService = {
   getProfile: async (): Promise<AuthUser> => {
     try {
       const { data } = await api.get<AuthUser>("/customer/me");
+      await secureStorage.saveUserData(data);
+      return data;
+    } catch (e) { throw handleAuthError(e as ApiError); }
+  },
+
+  updateUserProfile: async (updates: { name?: string; phone?: string; bio?: string; avatarUrl?: string }): Promise<AuthUser> => {
+    try {
+      const { data } = await api.patch<AuthUser>("/customer/me", updates);
       await secureStorage.saveUserData(data);
       return data;
     } catch (e) { throw handleAuthError(e as ApiError); }

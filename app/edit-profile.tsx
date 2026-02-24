@@ -17,12 +17,15 @@ import { Camera, Save, X } from 'lucide-react-native';
 import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 export default function EditProfileScreen() {
   const { theme } = useTheme();
   const { user, updateProfile } = useAuth();
   const insets = useSafeAreaInsets();
   const [isLoading, setIsLoading] = useState(false);
+  const [avatarUri, setAvatarUri] = useState<string | null>(user?.avatarUrl || null);
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -52,6 +55,7 @@ export default function EditProfileScreen() {
         email: formData.email.trim(),
         phone: formData.phone.trim() || undefined,
         bio: formData.bio.trim() || undefined,
+        avatarUrl: avatarUri || undefined,
       });
       
       Alert.alert('Success', 'Profile updated successfully', [
@@ -67,13 +71,55 @@ export default function EditProfileScreen() {
     }
   };
 
+  const pickImage = async (useCamera: boolean) => {
+    try {
+      let result;
+      if (useCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Camera access is required to take a photo.');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.7,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Photo library access is required.');
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.7,
+        });
+      }
+      if (!result.canceled && result.assets[0]) {
+        // Resize to 300x300 and convert to base64 for storage
+        const manipulated = await ImageManipulator.manipulateAsync(
+          result.assets[0].uri,
+          [{ resize: { width: 300, height: 300 } }],
+          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        setAvatarUri(`data:image/jpeg;base64,${manipulated.base64}`);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
   const handlePhotoPress = () => {
     Alert.alert(
       'Change Profile Photo',
-      'Photo upload is not implemented in this demo',
+      'Choose a photo source',
       [
-        { text: 'Camera', onPress: () => {} },
-        { text: 'Photo Library', onPress: () => {} },
+        { text: 'Camera', onPress: () => pickImage(true) },
+        { text: 'Photo Library', onPress: () => pickImage(false) },
         { text: 'Cancel', style: 'cancel' },
       ]
     );
@@ -202,11 +248,11 @@ export default function EditProfileScreen() {
       >
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
-            {user?.avatarUrl && user.avatarUrl.trim() !== '' ? (
-              <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+            {avatarUri && avatarUri.trim() !== '' ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <Text style={styles.avatarText}>{formData.name[0] || 'U'}</Text>
+                <Text style={styles.avatarText}>{formData.name[0]?.toUpperCase() || 'U'}</Text>
               </View>
             )}
             <TouchableOpacity style={styles.cameraButton} onPress={handlePhotoPress}>

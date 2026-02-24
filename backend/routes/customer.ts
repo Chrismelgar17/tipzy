@@ -298,6 +298,39 @@ customer.get("/me", requireAuth, async (c) => {
     businessName: user.business_name ?? undefined,
     businessCategory: user.business_category ?? undefined,
     businessStatus: user.business_status ?? undefined,
+    avatarUrl: user.avatar_url ?? undefined,
+    bio: user.bio ?? undefined,
+  });
+});
+
+// Update profile (name, phone, bio, avatarUrl)
+customer.patch("/me", requireAuth, async (c) => {
+  let body: { name?: string; phone?: string; bio?: string; avatarUrl?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const userId = c.get("userId");
+  const res = await query<DbUser>("SELECT * FROM users WHERE id = $1", [userId]);
+  const user = res.rows[0];
+  if (!user) return c.json({ error: "User not found" }, 404);
+
+  const name = body.name?.trim() || user.name;
+  const phone = body.phone !== undefined ? (body.phone.trim() || null) : user.phone;
+  const bio = body.bio !== undefined ? (body.bio.trim() || null) : user.bio;
+  const avatarUrl = body.avatarUrl !== undefined ? (body.avatarUrl || null) : user.avatar_url;
+
+  await query(
+    "UPDATE users SET name = $1, phone = $2, bio = $3, avatar_url = $4 WHERE id = $5",
+    [name, phone, bio, avatarUrl, userId],
+  );
+
+  return c.json({
+    id: user.id, name, email: user.email, age: user.age, phone,
+    role: user.role, createdAt: user.created_at, emailVerified: user.email_verified ?? false,
+    businessName: user.business_name ?? undefined,
+    businessCategory: user.business_category ?? undefined,
+    businessStatus: user.business_status ?? undefined,
+    avatarUrl: avatarUrl ?? undefined,
+    bio: bio ?? undefined,
   });
 });
 

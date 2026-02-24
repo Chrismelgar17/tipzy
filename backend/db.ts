@@ -18,6 +18,8 @@ export interface DbUser {
   email_verified?: boolean | null;
   auth_provider?: "google" | "apple" | "phone" | null;
   provider_subject?: string | null;
+  avatar_url?: string | null;
+  bio?: string | null;
 }
 
 export interface DbVenue {
@@ -105,6 +107,9 @@ const initPromise = (async () => {
       auth_provider TEXT CHECK (auth_provider IN ('google','apple','phone')),
       provider_subject TEXT
     );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;
 
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       token TEXT PRIMARY KEY,
