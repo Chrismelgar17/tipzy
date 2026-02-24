@@ -58,15 +58,91 @@ export async function sendEmail(opts: { to: string; subject: string; text: strin
 
 export async function sendVerificationEmail(to: string, token: string) {
   const subject = "Tipzy: Verify your email";
-  const text = `Here is your verification code: ${token}\n\nUse it in the Tipzy app or POST /api/customer/verify with { "token": "${token}" }.`;
-  const html = `<p>Here is your verification code:</p><p style="font-size:18px;font-weight:bold;">${token}</p><p>Use it in the Tipzy app or POST /api/customer/verify with the code above.</p>`;
+  const text = `Here is your verification code: ${token}\n\nUse it in the Tipzy app.`;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#0B0B0F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0F;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
+
+        <!-- HEADER -->
+        <tr><td style="background:linear-gradient(135deg,#00D4FF 0%,#0099BB 100%);border-radius:16px 16px 0 0;padding:40px 40px 32px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:8px;">🍸</div>
+          <h1 style="margin:0;color:#FFFFFF;font-size:32px;font-weight:900;letter-spacing:-1px;">TIPZY</h1>
+          <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:14px;letter-spacing:1px;text-transform:uppercase;">Nightlife Access</p>
+        </td></tr>
+
+        <!-- BODY -->
+        <tr><td style="background:#16161E;padding:40px 40px 32px;text-align:center;">
+          <h2 style="margin:0 0 8px;color:#FFFFFF;font-size:22px;font-weight:700;">Verify your email</h2>
+          <p style="margin:0 0 32px;color:#9CA3AF;font-size:15px;line-height:1.6;">Use the code below to verify your account and start accessing exclusive venues.</p>
+
+          <!-- CODE BOX -->
+          <div style="background:#0B0B0F;border:2px solid #00D4FF;border-radius:12px;padding:24px 32px;display:inline-block;margin-bottom:32px;">
+            <p style="margin:0 0 4px;color:#00D4FF;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Verification Code</p>
+            <p style="margin:0;color:#FFFFFF;font-size:36px;font-weight:900;letter-spacing:8px;">${token}</p>
+          </div>
+
+          <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.6;">This code expires in <strong style="color:#9CA3AF;">24 hours</strong>.<br/>If you didn't create a Tipzy account, you can ignore this email.</p>
+        </td></tr>
+
+        <!-- FOOTER -->
+        <tr><td style="background:#0F0F14;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="margin:0;color:#374151;font-size:12px;">© 2026 Tipzy · tipzy.team@gmail.com</p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
   return sendEmail({ to, subject, text, html });
 }
 
 export async function sendPasswordResetEmail(to: string, token: string) {
   const subject = "Tipzy: Reset your password";
-  const text = `We received a password reset request. Use this code: ${token}\n\nPOST /api/customer/reset-password with { "token": "${token}", "newPassword": "<your new password>" }. If you did not request this, ignore this email.`;
-  const html = `<p>We received a password reset request.</p><p style="font-size:18px;font-weight:bold;">${token}</p><p>POST /api/customer/reset-password with the code above and your new password. If you did not request this, you can ignore this email.</p>`;
+  const text = `We received a password reset request. Use this code: ${token}\n\nIf you did not request this, ignore this email.`;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#0B0B0F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0F;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
+
+        <!-- HEADER -->
+        <tr><td style="background:linear-gradient(135deg,#00D4FF 0%,#0099BB 100%);border-radius:16px 16px 0 0;padding:40px 40px 32px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:8px;">🍸</div>
+          <h1 style="margin:0;color:#FFFFFF;font-size:32px;font-weight:900;letter-spacing:-1px;">TIPZY</h1>
+          <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:14px;letter-spacing:1px;text-transform:uppercase;">Nightlife Access</p>
+        </td></tr>
+
+        <!-- BODY -->
+        <tr><td style="background:#16161E;padding:40px 40px 32px;text-align:center;">
+          <h2 style="margin:0 0 8px;color:#FFFFFF;font-size:22px;font-weight:700;">Password Reset</h2>
+          <p style="margin:0 0 32px;color:#9CA3AF;font-size:15px;line-height:1.6;">We received a request to reset your password. Use the code below in the app.</p>
+
+          <!-- CODE BOX -->
+          <div style="background:#0B0B0F;border:2px solid #00D4FF;border-radius:12px;padding:24px 32px;display:inline-block;margin-bottom:32px;">
+            <p style="margin:0 0 4px;color:#00D4FF;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Reset Code</p>
+            <p style="margin:0;color:#FFFFFF;font-size:36px;font-weight:900;letter-spacing:8px;">${token}</p>
+          </div>
+
+          <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.6;">This code expires in <strong style="color:#9CA3AF;">1 hour</strong>.<br/>If you didn't request a reset, you can safely ignore this email.</p>
+        </td></tr>
+
+        <!-- FOOTER -->
+        <tr><td style="background:#0F0F14;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="margin:0;color:#374151;font-size:12px;">© 2026 Tipzy · tipzy.team@gmail.com</p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
   return sendEmail({ to, subject, text, html });
 }
 
