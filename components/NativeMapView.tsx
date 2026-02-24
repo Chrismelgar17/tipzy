@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
-import { Users } from 'lucide-react-native';
+import React, { useMemo, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Platform, Animated, Easing } from 'react-native';
+import { Users, User } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { Venue } from '@/types/models';
 
@@ -260,17 +260,68 @@ interface NativeMapViewProps {
   venues: Venue[];
   onMarkerPress: (venue: Venue) => void;
   getMarkerColor: (crowdCount: number) => string;
+  userLocation?: { latitude: number; longitude: number } | null;
 }
 
-export default function NativeMapView({ venues, onMarkerPress, getMarkerColor }: NativeMapViewProps) {
+// Animated pulsing ring for user location
+function UserLocationMarker() {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [pulse]);
+
+  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.4] });
+  const ringOpacity = pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.6, 0.3, 0] });
+
+  return (
+    <View style={styles.userLocationWrapper}>
+      {/* Pulsing ring */}
+      <Animated.View
+        style={[
+          styles.userLocationRing,
+          { transform: [{ scale: ringScale }], opacity: ringOpacity },
+        ]}
+      />
+      {/* Inner dot with person icon */}
+      <View style={styles.userLocationDot}>
+        <User size={18} color="#FFFFFF" strokeWidth={2.5} />
+      </View>
+    </View>
+  );
+}
+
+export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, userLocation }: NativeMapViewProps) {
   // Build list of venues that have real coordinates
   const mappableVenues = useMemo(
     () => venues.filter(v => v.geo && (v.geo.lat !== 0 || v.geo.lng !== 0)),
     [venues],
   );
 
-  // Center on the first valid venue, or fall back to the US center
+  // Center on user location if available, else first venue, else US fallback
   const initialRegion = useMemo(() => {
+    if (userLocation) {
+      return {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      };
+    }
     if (mappableVenues.length === 0) return US_FALLBACK_REGION;
     const first = mappableVenues[0];
     return {
@@ -279,7 +330,7 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor }:
       latitudeDelta: mappableVenues.length === 1 ? 0.05 : 5,
       longitudeDelta: mappableVenues.length === 1 ? 0.05 : 8,
     };
-  }, [mappableVenues]);
+  }, [mappableVenues, userLocation]);
 
   // If MapView is not available (web platform), return a fallback
   if (!MapView || !Marker) {
@@ -297,14 +348,25 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor }:
       <MapView
         style={styles.map}
         initialRegion={initialRegion}
-        showsUserLocation={true}
-        showsMyLocationButton={true}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
         customMapStyle={mapStyle}
         zoomEnabled={true}
         scrollEnabled={true}
         pitchEnabled={true}
         rotateEnabled={true}
       >
+        {/* Custom user location marker */}
+        {userLocation && (
+          <Marker
+            coordinate={userLocation}
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={false}
+          >
+            <UserLocationMarker />
+          </Marker>
+        )}
+
         {mappableVenues.map((venue) => (
           <Marker
             key={venue.id}
@@ -315,7 +377,7 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor }:
               styles.customMarker,
               { backgroundColor: getMarkerColor(venue.crowdCount) }
             ]}>
-              <Users size={16} color="white" />
+              <Users size={11} color="white" />
             </View>
           </Marker>
         ))}
@@ -359,18 +421,48 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
   },
   customMarker: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: 'white',
     elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+  },
+  userLocationWrapper: {
+    width: 56,
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userLocationRing: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 75, 75, 0.35)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 75, 75, 0.5)',
+  },
+  userLocationDot: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FF4B4B',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+    shadowColor: '#FF4B4B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
   },
   legend: {
     position: 'absolute',
