@@ -1,63 +1,58 @@
 /**
- * Mail helper using Nodemailer + Gmail SMTP.
- * Uses SMTP_USER / SMTP_PASS (Gmail App Password) from env.
+ * Mail helper using Brevo (formerly Sendinblue) HTTP API.
+ * Uses HTTPS — works on Railway with no SMTP ports needed.
  *
  * Required env vars:
- *   SMTP_USER  — Gmail address (e.g. tipzy.team@gmail.com)
- *   SMTP_PASS  — Gmail App Password (16-char, spaces optional)
- *   MAIL_FROM  — Sender address (defaults to SMTP_USER)
- *   MAIL_FROM_NAME — Display name (defaults to "Tipzy")
+ *   BREVO_API_KEY  — from app.brevo.com → SMTP & API → API Keys
+ *   MAIL_FROM      — verified sender email (e.g. tipzy.team@gmail.com)
+ *   MAIL_FROM_NAME — display name (optional, defaults to "Tipzy")
  *
- * If SMTP_USER / SMTP_PASS are not set, emails are skipped gracefully.
+ * If BREVO_API_KEY is not set, emails are skipped gracefully.
  */
-import nodemailer from "nodemailer";
 
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 const DEFAULT_NAME = process.env.MAIL_FROM_NAME ?? "Tipzy";
+const DEFAULT_FROM = process.env.MAIL_FROM ?? "tipzy.team@gmail.com";
 
 type MailResult = { messageId: string };
 
-let transporterCache: nodemailer.Transporter | null | undefined = undefined;
-
-function getTransporter(): nodemailer.Transporter | null {
-  if (transporterCache !== undefined) return transporterCache;
-
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!user || !pass) {
-    console.warn("[mail] SMTP_USER / SMTP_PASS not set — emails will be skipped");
-    transporterCache = null;
-    return null;
-  }
-
-  transporterCache = nodemailer.createTransport({
-    service: "gmail",
-    auth: { user, pass },
-  });
-
-  console.log(`[mail] Gmail SMTP ready — sending as ${user}`);
-  return transporterCache;
-}
-
 export async function sendEmail(opts: { to: string; subject: string; text: string; html?: string }): Promise<MailResult> {
-  const transporter = getTransporter();
-  if (!transporter) {
-    console.warn(`[mail] Skipping email to ${opts.to}: "${opts.subject}"`);
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    console.warn(`[mail] No BREVO_API_KEY — skipping email to ${opts.to}: "${opts.subject}"`);
     return { messageId: "skipped" };
   }
 
-  const senderAddress = process.env.MAIL_FROM ?? process.env.SMTP_USER;
-  const from = `${DEFAULT_NAME} <${senderAddress}>`;
+  const body = JSON.stringify({
+    sender: { name: DEFAULT_NAME, email: DEFAULT_FROM },
+    to: [{ email: opts.to }],
+    subject: opts.subject,
+    textContent: opts.text,
+    htmlContent: opts.html ?? opts.text,
+  });
 
-  const sendPromise = transporter.sendMail({ from, to: opts.to, subject: opts.subject, text: opts.text, html: opts.html });
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("Email send timeout after 10s")), 10_000)
-  );
+  const res = await fetch(BREVO_API_URL, {
+    method: "POST",
+    headers: {
+      "api-key": apiKey,
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body,
+  });
 
-  const info = await Promise.race([sendPromise, timeoutPromise]);
-  console.log(`[mail] Sent "${opts.subject}" to ${opts.to} — id: ${info.messageId}`);
-  return { messageId: info.messageId };
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`[mail] Brevo error ${res.status}:`, err);
+    throw new Error(`Email send failed: ${res.status}`);
+  }
+
+  const data = await res.json() as { messageId?: string };
+  console.log(`[mail] Sent "${opts.subject}" to ${opts.to} — id: ${data.messageId}`);
+  return { messageId: data.messageId ?? "ok" };
 }
+
+
 
 
 
