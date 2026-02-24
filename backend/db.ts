@@ -176,6 +176,14 @@ const initPromise = (async () => {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    CREATE TABLE IF NOT EXISTS venue_views (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      viewer_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      viewed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS venue_views_venue_idx ON venue_views (venue_id, viewed_at DESC);
   `);
 
   // Backfill column for existing deployments

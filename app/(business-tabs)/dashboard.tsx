@@ -441,7 +441,7 @@ export default function BusinessDashboard() {
                   <DollarSign size={24} color={theme.colors.white} />
                 </View>
                 <Text style={styles.summaryValue}>
-                  {statsLoading ? 'â€“' : stats?.weeklySales ?? 127}
+                  {statsLoading ? '–' : stats?.weeklySales ?? 0}
                 </Text>
                 <Text style={styles.summaryLabel}>Weekly{'\n'}Sales</Text>
               </LinearGradient>
@@ -457,7 +457,7 @@ export default function BusinessDashboard() {
                   <TrendingUp size={24} color={theme.colors.white} />
                 </View>
                 <Text style={styles.summaryValue}>
-                  ${statsLoading ? 'â€“' : stats?.weeklyRevenue ?? 3450}
+                  ${statsLoading ? '–' : stats?.weeklyRevenue ?? 0}
                 </Text>
                 <Text style={styles.summaryLabel}>Weekly{'\n'}Income</Text>
               </LinearGradient>
@@ -473,7 +473,7 @@ export default function BusinessDashboard() {
                   <Eye size={24} color={theme.colors.white} />
                 </View>
                 <Text style={styles.summaryValue}>
-                  {statsLoading ? 'â€“' : stats?.weeklyViews ?? 2890}
+                  {statsLoading ? '–' : stats?.weeklyViews ?? 0}
                 </Text>
                 <Text style={styles.summaryLabel}>Weekly{'\n'}Views</Text>
               </LinearGradient>
