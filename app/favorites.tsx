@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,9 +20,11 @@ import { router } from 'expo-router';
 export default function FavoritesScreen() {
   const { user, updateProfile } = useAuth();
   const { venues } = useVenues();
-  const [favorites, setFavorites] = useState<string[]>(user?.favorites || []);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'rating' | 'distance'>('name');
+
+  // Always read favorites directly from user so it stays in sync
+  const favorites = user?.favorites || [];
 
   const favoriteVenues = useMemo(() => {
     let filtered = venues.filter((venue: Venue) => favorites.includes(venue.id));
@@ -42,9 +44,7 @@ export default function FavoritesScreen() {
         case 'name':
           return a.name.localeCompare(b.name);
         case 'rating':
-          const ratingA = 4.0 + Math.random() * 1.0;
-          const ratingB = 4.0 + Math.random() * 1.0;
-          return ratingB - ratingA;
+          return (b.rating || 0) - (a.rating || 0);
         case 'distance':
           return (a.distance || 0) - (b.distance || 0);
         default:
@@ -53,7 +53,7 @@ export default function FavoritesScreen() {
     });
     
     return filtered;
-  }, [favorites, searchQuery, sortBy]);
+  }, [favorites, venues, searchQuery, sortBy]);
 
   const removeFavorite = (venueId: string) => {
     Alert.alert(
@@ -66,7 +66,6 @@ export default function FavoritesScreen() {
           style: 'destructive',
           onPress: () => {
             const updatedFavorites = favorites.filter(id => id !== venueId);
-            setFavorites(updatedFavorites);
             if (user) {
               updateProfile({ favorites: updatedFavorites });
             }
