@@ -15,7 +15,11 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { clearAllAppData } from "@/utils/storage";
 import { trpc, trpcClient } from "@/lib/trpc";
 
-SplashScreen.preventAutoHideAsync();
+// Keep the splash visible until we explicitly hide it.
+// Guard with catch to avoid a module-scope unhandled rejection in production.
+void SplashScreen.preventAutoHideAsync().catch(() => {
+  // no-op
+});
 
 const queryClient = new QueryClient();
 
@@ -148,14 +152,15 @@ function RootLayoutNav() {
 
 function ThemedRootLayout() {
   const { theme } = useTheme();
-  
   useEffect(() => {
-    const initializeApp = async () => {
+    // Hide the splash immediately on first mount — never block on async work.
+    void SplashScreen.hideAsync().catch(() => {});
+
+    // Run storage cleanup in the background, after the app is already visible.
+    const cleanupCorruptedStorage = async () => {
       try {
-        // Check for corrupted data on app startup
         const AsyncStorage = await import('@react-native-async-storage/async-storage');
         const keys = await AsyncStorage.default.getAllKeys();
-        
         for (const key of keys) {
           try {
             const value = await AsyncStorage.default.getItem(key);
@@ -174,12 +179,10 @@ function ThemedRootLayout() {
         }
       } catch (error) {
         console.error('Error during app initialization:', error);
-      } finally {
-        SplashScreen.hideAsync();
       }
     };
-    
-    initializeApp();
+
+    void cleanupCorruptedStorage();
   }, []);
 
   const rootStyles = StyleSheet.create({

@@ -293,3 +293,145 @@ export async function sendBusinessApprovalRequestEmail(
 
   return sendEmail({ to: "tipzy.team@gmail.com", subject, text, html });
 }
+
+// ── Business approved notification (sent to the business owner) ──────────────
+
+export async function sendBusinessApprovedEmail(
+  to: string,
+  ownerName: string,
+  businessName: string,
+): Promise<MailResult> {
+  const subject = `🎉 Your business "${businessName}" has been approved on Tipzy!`;
+  const text = [
+    `Hi ${ownerName},`,
+    ``,
+    `Great news! Your business "${businessName}" has been approved and is now live on Tipzy.`,
+    ``,
+    `You can now sign in to the app and access your full business dashboard to manage your venue, track crowd levels, and more.`,
+    ``,
+    `Welcome to Tipzy! 🍸`,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#0B0B0F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0F;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
+
+        <!-- HEADER -->
+        <tr><td style="background:linear-gradient(135deg,#22C55E 0%,#16A34A 100%);border-radius:16px 16px 0 0;padding:40px 40px 32px;text-align:center;">
+          <div style="font-size:52px;margin-bottom:8px;">🎉</div>
+          <h1 style="margin:0;color:#FFFFFF;font-size:30px;font-weight:900;letter-spacing:-0.5px;">You're Approved!</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:14px;letter-spacing:1px;text-transform:uppercase;">Tipzy Business</p>
+        </td></tr>
+
+        <!-- BODY -->
+        <tr><td style="background:#16161E;padding:40px 40px 32px;text-align:center;">
+          <h2 style="margin:0 0 8px;color:#FFFFFF;font-size:22px;font-weight:700;">Hi ${escHtml(ownerName)} 👋</h2>
+          <p style="margin:0 0 24px;color:#9CA3AF;font-size:15px;line-height:1.7;">
+            Your business <strong style="color:#4ADE80;">${escHtml(businessName)}</strong> has been reviewed and <strong style="color:#4ADE80;">approved</strong> by the Tipzy team. Your venue is now live on the platform!
+          </p>
+
+          <div style="background:#0B0B0F;border:2px solid #22C55E;border-radius:14px;padding:24px 28px;margin-bottom:28px;text-align:left;">
+            <p style="margin:0 0 10px;color:#4ADE80;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">What's next?</p>
+            <p style="margin:0 0 8px;color:#E5E7EB;font-size:14px;line-height:1.65;">✅ &nbsp;Sign in to the Tipzy app</p>
+            <p style="margin:0 0 8px;color:#E5E7EB;font-size:14px;line-height:1.65;">📊 &nbsp;Access your business dashboard</p>
+            <p style="margin:0 0 8px;color:#E5E7EB;font-size:14px;line-height:1.65;">👥 &nbsp;Update your live crowd count</p>
+            <p style="margin:0;color:#E5E7EB;font-size:14px;line-height:1.65;">🎟️ &nbsp;Create offers and manage tickets</p>
+          </div>
+
+          <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.6;">Welcome to the Tipzy family! 🍸<br/>We can't wait to see your venue shine.</p>
+        </td></tr>
+
+        <!-- FOOTER -->
+        <tr><td style="background:#0F0F14;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="margin:0;color:#374151;font-size:12px;">© 2026 Tipzy · tipzy.team@gmail.com</p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  return sendEmail({ to, subject, text, html });
+}
+
+// ── Business rejected notification (sent to the business owner) ──────────────
+
+export async function sendBusinessRejectedEmail(
+  to: string,
+  ownerName: string,
+  businessName: string,
+  reason?: string,
+): Promise<MailResult> {
+  const subject = `Update on your Tipzy business registration: "${businessName}"`;
+  const reasonBlock = reason
+    ? `Reason: ${reason}\n\n`
+    : "";
+  const text = [
+    `Hi ${ownerName},`,
+    ``,
+    `Thank you for registering "${businessName}" on Tipzy.`,
+    ``,
+    `After reviewing your application, we were unable to approve it at this time.`,
+    ``,
+    reasonBlock,
+    `If you believe this was a mistake or would like to reapply with updated information, please contact us at tipzy.team@gmail.com.`,
+    ``,
+    `The Tipzy Team`,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#0B0B0F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0F;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
+
+        <!-- HEADER -->
+        <tr><td style="background:linear-gradient(135deg,#374151 0%,#1F2937 100%);border-radius:16px 16px 0 0;padding:40px 40px 32px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:8px;">🍸</div>
+          <h1 style="margin:0;color:#FFFFFF;font-size:30px;font-weight:900;letter-spacing:-0.5px;">TIPZY</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,0.75);font-size:14px;letter-spacing:1px;text-transform:uppercase;">Business Registration Update</p>
+        </td></tr>
+
+        <!-- BODY -->
+        <tr><td style="background:#16161E;padding:40px 40px 32px;text-align:center;">
+          <h2 style="margin:0 0 8px;color:#FFFFFF;font-size:22px;font-weight:700;">Hi ${escHtml(ownerName)},</h2>
+          <p style="margin:0 0 24px;color:#9CA3AF;font-size:15px;line-height:1.7;">
+            Thank you for registering <strong style="color:#E5E7EB;">${escHtml(businessName)}</strong> on Tipzy. After reviewing your application, we were unable to approve it at this time.
+          </p>
+
+          ${reason ? `
+          <div style="background:#0B0B0F;border:2px solid rgba(255,107,107,0.4);border-radius:14px;padding:22px 28px;margin-bottom:28px;text-align:left;">
+            <p style="margin:0 0 8px;color:#FF6B6B;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Reason</p>
+            <p style="margin:0;color:#E5E7EB;font-size:14px;line-height:1.65;">${escHtml(reason)}</p>
+          </div>
+          ` : ""}
+
+          <div style="background:#0B0B0F;border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:22px 28px;margin-bottom:24px;text-align:left;">
+            <p style="margin:0 0 8px;color:#9CA3AF;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">What can you do?</p>
+            <p style="margin:0 0 8px;color:#E5E7EB;font-size:14px;line-height:1.65;">📧 &nbsp;Contact us at <a href="mailto:tipzy.team@gmail.com" style="color:#A78BFA;">tipzy.team@gmail.com</a></p>
+            <p style="margin:0;color:#E5E7EB;font-size:14px;line-height:1.65;">📝 &nbsp;Reapply with updated information</p>
+          </div>
+
+          <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.6;">We appreciate your interest in Tipzy.<br/>The Tipzy Team</p>
+        </td></tr>
+
+        <!-- FOOTER -->
+        <tr><td style="background:#0F0F14;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="margin:0;color:#374151;font-size:12px;">© 2026 Tipzy · tipzy.team@gmail.com</p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  return sendEmail({ to, subject, text, html });
+}

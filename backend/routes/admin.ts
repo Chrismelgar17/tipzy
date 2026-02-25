@@ -11,6 +11,7 @@
 import { Hono } from "hono";
 import { requireAuth, requireRole, hashPassword } from "../auth";
 import { query, type DbUser } from "../db";
+import { sendBusinessApprovedEmail, sendBusinessRejectedEmail } from "../email";
 
 const admin = new Hono();
 
@@ -58,6 +59,13 @@ admin.get("/approve-business/:token", async (c) => {
   await query("DELETE FROM business_approval_tokens WHERE token = $1", [token]);
 
   const businessName = user.business_name ?? user.name;
+
+  // Notify the business owner by email
+  try {
+    await sendBusinessApprovedEmail(user.email, user.name, businessName);
+  } catch (err) {
+    console.error("[admin] Failed to send approval notification email:", err);
+  }
 
   return c.html(`<!DOCTYPE html>
 <html lang="en">
@@ -132,12 +140,21 @@ admin.patch("/users/:id/role", async (c) => {
 // Approve a business account
 admin.patch("/business/:id/approve", async (c) => {
   const id = c.req.param("id");
-  const res = await query<DbUser>("SELECT role FROM users WHERE id = $1", [id]);
+  const res = await query<DbUser>("SELECT id, role, email, name, business_name FROM users WHERE id = $1", [id]);
   const user = res.rows[0];
   if (!user) return c.json({ error: "User not found" }, 404);
   if (user.role !== "business") return c.json({ error: "Not a business account" }, 400);
 
   await query("UPDATE users SET business_status = 'approved' WHERE id = $1", [id]);
+  await query("UPDATE venues SET status = 'approved' WHERE owner_user_id = $1", [id]);
+
+  // Notify the business owner by email
+  try {
+    await sendBusinessApprovedEmail(user.email, user.name, user.business_name ?? user.name);
+  } catch (err) {
+    console.error("[admin] Failed to send approval email:", err);
+  }
+
   return c.json({ message: "Business approved", user: { id, businessStatus: "approved" } });
 });
 
@@ -147,12 +164,20 @@ admin.patch("/business/:id/reject", async (c) => {
   try { body = await c.req.json(); } catch { body = {}; }
 
   const id = c.req.param("id");
-  const res = await query<DbUser>("SELECT role FROM users WHERE id = $1", [id]);
+  const res = await query<DbUser>("SELECT id, role, email, name, business_name FROM users WHERE id = $1", [id]);
   const user = res.rows[0];
   if (!user) return c.json({ error: "User not found" }, 404);
   if (user.role !== "business") return c.json({ error: "Not a business account" }, 400);
 
   await query("UPDATE users SET business_status = 'rejected' WHERE id = $1", [id]);
+
+  // Notify the business owner by email
+  try {
+    await sendBusinessRejectedEmail(user.email, user.name, user.business_name ?? user.name, body.reason);
+  } catch (err) {
+    console.error("[admin] Failed to send rejection email:", err);
+  }
+
   return c.json({ message: "Business rejected", reason: body.reason ?? null });
 });
 

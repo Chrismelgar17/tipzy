@@ -1,6 +1,6 @@
 {
   "name": "expo-app",
-  "main": "app/index.tsx",
+  "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
     "start": "bunx rork start -p wg8iv71m5o6ub4pfbtixh --lan",

@@ -7,16 +7,24 @@ import {
   SafeAreaView, 
   ScrollView,
   Image,
-  Dimensions
+  Dimensions,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
 import { ArrowLeft, Plus, X } from 'lucide-react-native';
 
+const MIN_PHOTOS = 2;
+const MAX_PHOTOS = 5;
+
 const { width } = Dimensions.get('window');
 const imageSize = (width - 60) / 2;
+
+// true = came from the device camera roll (not a sample)
+type GalleryImage = { uri: string; isOwn: boolean };
 
 const SAMPLE_IMAGES = [
   'https://images.unsplash.com/photo-1566737236500-c8ac43014a8e?w=400',
@@ -30,27 +38,63 @@ export default function BusinessGalleryScreen() {
   const { theme } = useTheme();
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
-  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [selectedImages, setSelectedImages] = useState<GalleryImage[]>([]);
 
   if (!isLoading && !isAuthenticated) {
     router.replace('/(auth)/signin' as any);
     return null;
   }
 
-  const handleImageSelect = (imageUrl: string) => {
-    if (selectedImages.includes(imageUrl)) {
-      setSelectedImages(prev => prev.filter(img => img !== imageUrl));
-    } else if (selectedImages.length < 5) {
-      setSelectedImages(prev => [...prev, imageUrl]);
+  // Toggle a sample image on/off
+  const handleSampleSelect = (imageUrl: string) => {
+    const already = selectedImages.find(img => img.uri === imageUrl);
+    if (already) {
+      setSelectedImages(prev => prev.filter(img => img.uri !== imageUrl));
+    } else if (selectedImages.length < MAX_PHOTOS) {
+      setSelectedImages(prev => [...prev, { uri: imageUrl, isOwn: false }]);
     }
   };
 
+  // Remove any image (sample or own)
+  const handleRemove = (uri: string) => {
+    setSelectedImages(prev => prev.filter(img => img.uri !== uri));
+  };
+
+  // Open the device image picker to add own photos
+  const handleAddOwnImage = async () => {
+    if (selectedImages.length >= MAX_PHOTOS) {
+      Alert.alert('Limit reached', `You can add up to ${MAX_PHOTOS} photos.`);
+      return;
+    }
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission required', 'Please allow access to your photo library to upload images.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      const uri = result.assets[0].uri;
+      if (!selectedImages.find(img => img.uri === uri)) {
+        setSelectedImages(prev => [...prev, { uri, isOwn: true }]);
+      }
+    }
+  };
+
+  const canContinue = selectedImages.length >= MIN_PHOTOS;
+
   const handleContinue = async () => {
-    if (selectedImages.length === 0) return;
+    if (!canContinue) return;
     try {
       const raw = await AsyncStorage.getItem('businessProfile');
       const profile = raw ? JSON.parse(raw) : {};
-      await AsyncStorage.setItem('businessProfile', JSON.stringify({ ...profile, galleryImages: selectedImages }));
+      await AsyncStorage.setItem(
+        'businessProfile',
+        JSON.stringify({ ...profile, galleryImages: selectedImages.map(img => img.uri) })
+      );
     } catch {}
     router.push('/onboarding/business-hours' as any);
   };
@@ -221,7 +265,13 @@ export default function BusinessGalleryScreen() {
     counter: {
       fontSize: 14,
       color: theme.colors.text.secondary,
-      textAlign: 'center',
+      textAlign: 'center' as const,
+      marginBottom: 16,
+    },
+    requiredNote: {
+      fontSize: 13,
+      color: theme.colors.error ?? '#e74c3c',
+      textAlign: 'center' as const,
       marginBottom: 16,
     },
   });
@@ -243,36 +293,39 @@ export default function BusinessGalleryScreen() {
         <View style={styles.scrollContent}>
           <Text style={styles.title}>Add Gallery Images</Text>
           <Text style={styles.subtitle}>
-            Upload 1-5 photos that showcase your venue&apos;s atmosphere and style
+            Add at least {MIN_PHOTOS} photos that showcase your venue&apos;s atmosphere and style (max {MAX_PHOTOS})
           </Text>
 
           <Text style={styles.sectionTitle}>Choose from samples:</Text>
           <View style={styles.imageGrid}>
-            {SAMPLE_IMAGES.map((imageUrl, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.imageContainer}
-                onPress={() => handleImageSelect(imageUrl)}
-                testID={`sample-image-${index}`}
-              >
-                <Image source={{ uri: imageUrl || 'https://images.unsplash.com/photo-1566417713940-fe7c737a9ef2?w=800' }} style={styles.image} />
-                <View style={[
-                  styles.imageOverlay,
-                  selectedImages.includes(imageUrl) && styles.selectedOverlay
-                ]}>
-                  {selectedImages.includes(imageUrl) && (
-                    <View style={styles.selectionIndicator}>
-                      <Text style={styles.selectionNumber}>
-                        {selectedImages.indexOf(imageUrl) + 1}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
+            {SAMPLE_IMAGES.map((imageUrl, index) => {
+              const isSelected = !!selectedImages.find(img => img.uri === imageUrl);
+              const selectionOrder = selectedImages.findIndex(img => img.uri === imageUrl);
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.imageContainer}
+                  onPress={() => handleSampleSelect(imageUrl)}
+                  testID={`sample-image-${index}`}
+                >
+                  <Image source={{ uri: imageUrl }} style={styles.image} />
+                  <View style={[
+                    styles.imageOverlay,
+                    isSelected && styles.selectedOverlay
+                  ]}>
+                    {isSelected && (
+                      <View style={styles.selectionIndicator}>
+                        <Text style={styles.selectionNumber}>{selectionOrder + 1}</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
             
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.addImageButton}
+              onPress={handleAddOwnImage}
               testID="add-image-button"
             >
               <Plus size={32} color={theme.colors.text.secondary} />
@@ -284,15 +337,20 @@ export default function BusinessGalleryScreen() {
             <View style={styles.selectedImagesSection}>
               <Text style={styles.sectionTitle}>Selected Images:</Text>
               <Text style={styles.counter}>
-                {selectedImages.length} of 5 images selected
+                {selectedImages.length} of {MAX_PHOTOS} images selected
               </Text>
+              {!canContinue && (
+                <Text style={styles.requiredNote}>
+                  {MIN_PHOTOS - selectedImages.length} more photo{MIN_PHOTOS - selectedImages.length > 1 ? 's' : ''} required
+                </Text>
+              )}
               <View style={styles.selectedImagesGrid}>
-                {selectedImages.map((imageUrl, index) => (
+                {selectedImages.map((img, index) => (
                   <View key={index} style={styles.selectedImageContainer}>
-                    <Image source={{ uri: imageUrl || 'https://images.unsplash.com/photo-1566417713940-fe7c737a9ef2?w=800' }} style={styles.selectedImage} />
+                    <Image source={{ uri: img.uri }} style={styles.selectedImage} />
                     <TouchableOpacity
                       style={styles.removeButton}
-                      onPress={() => handleImageSelect(imageUrl)}
+                      onPress={() => handleRemove(img.uri)}
                       testID={`remove-image-${index}`}
                     >
                       <X size={12} color={theme.colors.white} />
@@ -303,24 +361,22 @@ export default function BusinessGalleryScreen() {
             </View>
           )}
 
+          {selectedImages.length === 0 && (
+            <Text style={[styles.requiredNote, { marginBottom: 24 }]}>
+              At least {MIN_PHOTOS} photos are required to continue
+            </Text>
+          )}
+
           <TouchableOpacity
             style={[
               styles.continueButton,
-              selectedImages.length === 0 && styles.continueButtonDisabled
+              !canContinue && styles.continueButtonDisabled
             ]}
             onPress={handleContinue}
-            disabled={selectedImages.length === 0}
+            disabled={!canContinue}
             testID="continue-button"
           >
             <Text style={styles.continueButtonText}>Continue</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.skipButton}
-            onPress={() => router.push('/onboarding/business-hours' as any)}
-            testID="skip-button"
-          >
-            <Text style={styles.skipButtonText}>Skip for now</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

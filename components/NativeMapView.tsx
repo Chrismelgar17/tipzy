@@ -1,6 +1,6 @@
-import React, { useMemo, useEffect, useRef } from 'react';
+import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Platform, Animated, Easing } from 'react-native';
-import { Users, User } from 'lucide-react-native';
+import { User } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { Venue } from '@/types/models';
 
@@ -120,6 +120,43 @@ function UserLocationMarker() {
   );
 }
 
+// A venue marker that waits for layout before disabling view-change tracking.
+// This is required on Android for custom markers containing Text.
+function VenueMarker({
+  venue,
+  onMarkerPress,
+  getMarkerColor,
+}: {
+  venue: Venue;
+  onMarkerPress: (v: Venue) => void;
+  getMarkerColor: (n: number) => string;
+}) {
+  const [ready, setReady] = useState(false);
+
+  return (
+    <Marker
+      coordinate={{ latitude: venue.geo.lat, longitude: venue.geo.lng }}
+      onPress={() => onMarkerPress(venue)}
+      tracksViewChanges={!ready}
+      anchor={{ x: 0.5, y: 0.5 }}
+    >
+      <View
+        style={styles.markerOuter}
+        onLayout={() => setReady(true)}
+      >
+        <View style={[
+          styles.customMarker,
+          { backgroundColor: getMarkerColor(venue.crowdCount) }
+        ]}>
+          <Text style={styles.markerCount}>
+            {venue.crowdCount >= 100 ? '99+' : String(venue.crowdCount)}
+          </Text>
+        </View>
+      </View>
+    </Marker>
+  );
+}
+
 export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, userLocation }: NativeMapViewProps) {
   // Build list of venues that have real coordinates
   const mappableVenues = useMemo(
@@ -158,20 +195,15 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, u
     );
   }
 
-  const maxZoomLevel = 15; // Limit the maximum zoom-out level
-
   return (
     <View style={styles.mapContainer}>
       <MapView
         style={styles.map}
         initialRegion={initialRegion}
-        customMapStyle={mapStyle} // Apply dark theme
-        maxZoomLevel={maxZoomLevel} // Limit zoom-out level
-        showsUserLocation={true}
-        onUserLocationChange={(event) => {
-          const { latitude, longitude } = event.nativeEvent.coordinate;
-          console.log('User location updated:', latitude, longitude);
-        }}
+        customMapStyle={mapStyle}
+        minZoomLevel={10}
+        maxZoomLevel={19}
+        showsUserLocation={false}
       >
         {/* Custom user location marker */}
         {userLocation && (
@@ -185,18 +217,12 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, u
         )}
 
         {mappableVenues.map((venue) => (
-          <Marker
+          <VenueMarker
             key={venue.id}
-            coordinate={{ latitude: venue.geo.lat, longitude: venue.geo.lng }}
-            onPress={() => onMarkerPress(venue)}
-          >
-            <View style={[
-              styles.customMarker,
-              { backgroundColor: getMarkerColor(venue.crowdCount) }
-            ]}>
-              <Users size={11} color="white" />
-            </View>
-          </Marker>
+            venue={venue}
+            onMarkerPress={onMarkerPress}
+            getMarkerColor={getMarkerColor}
+          />
         ))}
       </MapView>
       
@@ -237,19 +263,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.text.secondary,
   },
+  markerOuter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   customMarker: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'white',
-    elevation: 5,
+    borderWidth: 2.5,
+    borderColor: 'rgba(255,255,255,0.9)',
+    elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 4,
+  },
+  markerCount: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   userLocationWrapper: {
     width: 56,

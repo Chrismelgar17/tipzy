@@ -8,7 +8,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "tipzy",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -90,7 +89,7 @@
       }
     },
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "sdkVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/10a82bc5-408f-4dbe-b305-5c1e8d59e321"

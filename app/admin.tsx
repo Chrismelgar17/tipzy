@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   TextInput,
   Alert,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import {
   BarChart3,
@@ -21,12 +22,24 @@ import {
   Trash2,
   X,
   Save,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
 import { useTickets } from '@/hooks/tickets-context';
 import { mockEvents, mockVenues } from '@/mocks/venues';
 import { Venue } from '@/types/models';
+import api from '@/lib/api';
+
+type PendingBusiness = {
+  id: string;
+  email: string;
+  name: string;
+  businessName: string | null;
+  businessStatus: string | null;
+  createdAt: string;
+};
 
 export default function AdminScreen() {
   const { user } = useAuth();
@@ -45,6 +58,13 @@ export default function AdminScreen() {
     priceLevel: 2,
   });
 
+  // Business requests
+  const [pendingBusinesses, setPendingBusinesses] = useState<PendingBusiness[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [selectedRejectId, setSelectedRejectId] = useState<string | null>(null);
+
   // Mock analytics data
   const analytics = {
     totalRevenue: orders.reduce((sum, order) => sum + order.amountTotal, 0),
@@ -53,6 +73,63 @@ export default function AdminScreen() {
     totalVenues: mockVenues.length,
     conversionRate: 0.68,
     avgOrderValue: orders.length > 0 ? orders.reduce((sum, order) => sum + order.amountTotal, 0) / orders.length : 0,
+  };
+
+  // Fetch pending business requests on mount
+  useEffect(() => {
+    void fetchPendingBusinesses();
+  }, []);
+
+  const fetchPendingBusinesses = async () => {
+    setLoadingRequests(true);
+    try {
+      const res = await api.get('/admin/users');
+      const all = (res.data.users ?? []) as PendingBusiness[];
+      setPendingBusinesses(all.filter(u => u.businessStatus === 'pending'));
+    } catch (err) {
+      console.error('[Admin] Failed to fetch business requests:', err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const handleApproveBusiness = (id: string) => {
+    Alert.alert('Approve Business', 'Approve this business? The owner will be notified by email.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Approve',
+        onPress: async () => {
+          try {
+            await api.patch(`/admin/business/${id}/approve`);
+            setPendingBusinesses(prev => prev.filter(b => b.id !== id));
+            Alert.alert('✅ Approved', 'Business approved. The owner has been notified by email.');
+          } catch {
+            Alert.alert('Error', 'Could not approve. Please try again.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const openRejectModal = (id: string) => {
+    setSelectedRejectId(id);
+    setRejectReason('');
+    setShowRejectModal(true);
+  };
+
+  const confirmReject = async () => {
+    if (!selectedRejectId) return;
+    try {
+      await api.patch(`/admin/business/${selectedRejectId}/reject`, {
+        reason: rejectReason.trim() || undefined,
+      });
+      setPendingBusinesses(prev => prev.filter(b => b.id !== selectedRejectId));
+      setShowRejectModal(false);
+      setSelectedRejectId(null);
+      Alert.alert('Rejected', 'Business rejected. The owner has been notified by email.');
+    } catch {
+      Alert.alert('Error', 'Could not reject. Please try again.');
+    }
   };
 
   const statsCards = [
@@ -207,6 +284,52 @@ export default function AdminScreen() {
               </View>
             );
           })}
+        </View>
+
+        {/* Business Requests */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Business Requests</Text>
+            <TouchableOpacity onPress={fetchPendingBusinesses} style={styles.refreshButton}>
+              <Text style={styles.refreshText}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loadingRequests ? (
+            <ActivityIndicator color={theme.colors.purple} style={{ marginVertical: 16 }} />
+          ) : pendingBusinesses.length === 0 ? (
+            <View style={styles.emptyRequests}>
+              <Text style={styles.emptyRequestsText}>No pending business requests</Text>
+            </View>
+          ) : (
+            pendingBusinesses.map(biz => (
+              <View key={biz.id} style={styles.businessRequestCard}>
+                <View style={styles.bizInfo}>
+                  <Text style={styles.bizName}>{biz.businessName ?? biz.name}</Text>
+                  <Text style={styles.bizEmail}>{biz.email}</Text>
+                  <Text style={styles.bizDate}>
+                    Registered: {new Date(biz.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+                <View style={styles.bizActions}>
+                  <TouchableOpacity
+                    style={styles.approveButton}
+                    onPress={() => handleApproveBusiness(biz.id)}
+                  >
+                    <CheckCircle2 size={15} color={theme.colors.white} />
+                    <Text style={styles.bizActionText}>Approve</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.rejectButton}
+                    onPress={() => openRejectModal(biz.id)}
+                  >
+                    <XCircle size={15} color={theme.colors.white} />
+                    <Text style={styles.bizActionText}>Reject</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
         </View>
 
         {/* Quick Actions */}
@@ -379,6 +502,46 @@ export default function AdminScreen() {
             <View style={styles.modalFooter}>
               <TouchableOpacity style={styles.doneButton} onPress={() => setShowCrowdUpdate(false)}>
                 <Text style={styles.doneButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reject Business Modal */}
+      <Modal visible={showRejectModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Reject Business</Text>
+              <TouchableOpacity onPress={() => setShowRejectModal(false)}>
+                <X size={24} color={theme.colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.inputLabel}>Reason for rejection (optional)</Text>
+              <TextInput
+                style={[styles.textInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                value={rejectReason}
+                onChangeText={setRejectReason}
+                placeholder="e.g. Incomplete information, venue not eligible..."
+                placeholderTextColor={theme.colors.text.tertiary}
+                multiline
+              />
+              <Text style={styles.rejectNote}>
+                The business owner will be notified by email with this reason.
+              </Text>
+            </View>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowRejectModal(false)}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: theme.colors.error }]}
+                onPress={confirmReject}
+              >
+                <XCircle size={16} color={theme.colors.white} />
+                <Text style={styles.saveButtonText}>Reject</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -670,5 +833,96 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  refreshButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  refreshText: {
+    color: theme.colors.text.secondary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  businessRequestCard: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  bizInfo: {
+    marginBottom: theme.spacing.sm,
+  },
+  bizName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 3,
+  },
+  bizEmail: {
+    fontSize: 13,
+    color: theme.colors.text.secondary,
+    marginBottom: 3,
+  },
+  bizDate: {
+    fontSize: 12,
+    color: theme.colors.text.tertiary,
+  },
+  bizActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  approveButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.success,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.sm,
+  },
+  rejectButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.error,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.sm,
+  },
+  bizActionText: {
+    color: theme.colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyRequests: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  emptyRequestsText: {
+    color: theme.colors.text.secondary,
+    fontSize: 15,
+  },
+  rejectNote: {
+    marginTop: 8,
+    fontSize: 12,
+    color: theme.colors.text.tertiary,
+    lineHeight: 16,
   },
 });
