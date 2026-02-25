@@ -75,14 +75,16 @@ export default function HomeScreen() {
   const nearbyVenues = useMemo(() => {
     if (!userLocation) return venues;
     return venues.filter(
-      (v) =>
-        v.geo &&
-        distanceMiles(
+      (v) => {
+        // Include venues with no geo data so they're never hidden
+        if (!v.geo || (v.geo.lat === 0 && v.geo.lng === 0)) return true;
+        return distanceMiles(
           userLocation.latitude,
           userLocation.longitude,
           v.geo.lat,
           v.geo.lng,
-        ) <= MAX_RADIUS_MILES,
+        ) <= MAX_RADIUS_MILES;
+      }
     );
   }, [venues, userLocation]);
 

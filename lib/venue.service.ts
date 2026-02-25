@@ -27,7 +27,7 @@ function normalizeVenue(v: any): Venue {
     name: v.name ?? "Unknown Venue",
     photos: Array.isArray(v.photos) ? v.photos : [],
     address: v.address ?? "",
-    geo: v.geo ?? { lat: 0, lng: 0 },
+    geo: (v.geo?.lat != null && v.geo?.lng != null && (v.geo.lat !== 0 || v.geo.lng !== 0)) ? v.geo : null,
     timezone: v.timezone ?? "America/New_York",
     hours: v.hours ?? {},
     minAge: v.minAge ?? 18,

@@ -107,17 +107,17 @@ export default function MapScreen() {
 
   // Only show venues within MAX_RADIUS_MILES of the user.
   // Fall back to all venues if location permission was denied.
+  // Venues with no valid geo are always included (never filtered out).
   const nearbyVenues = userLocation
-    ? venues.filter(
-        (v) =>
-          v.geo &&
-          distanceMiles(
-            userLocation.latitude,
-            userLocation.longitude,
-            v.geo.lat,
-            v.geo.lng,
-          ) <= MAX_RADIUS_MILES,
-      )
+    ? venues.filter((v) => {
+        if (!v.geo || (v.geo.lat === 0 && v.geo.lng === 0)) return true;
+        return distanceMiles(
+          userLocation.latitude,
+          userLocation.longitude,
+          v.geo.lat,
+          v.geo.lng,
+        ) <= MAX_RADIUS_MILES;
+      })
     : venues;
 
   const renderMapView = () => {

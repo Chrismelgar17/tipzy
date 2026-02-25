@@ -24,7 +24,7 @@ function rowToVenue(v: DbVenue) {
     ownerUserId: v.owner_user_id,
     name: v.name,
     address: v.address,
-    geo: { lat: v.lat ?? 0, lng: v.lng ?? 0 },
+    geo: (v.lat != null && v.lng != null) ? { lat: v.lat, lng: v.lng } : null,
     timezone: v.timezone,
     hours: typeof v.hours === "string" ? JSON.parse(v.hours) : v.hours,
     minAge: v.min_age,
