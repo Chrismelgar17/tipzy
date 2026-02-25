@@ -162,16 +162,22 @@ export default function HomeScreen() {
 
   // Get different venue sections
   const getFeaturedVenues = () => {
-    return nearbyVenues
-      .filter(venue => venue.featuredRank && venue.featuredRank <= 3)
+    const featured = nearbyVenues
+      .filter(venue => venue.featuredRank && venue.featuredRank > 0)
       .sort((a, b) => (a.featuredRank || 0) - (b.featuredRank || 0));
+    // Fall back to first 6 venues if none are marked featured
+    if (featured.length === 0) return nearbyVenues.slice(0, 6);
+    return featured;
   };
 
   const getPlacesYoullLike = () => {
-    return nearbyVenues
-      .filter(venue => (venue.rating || 0) >= 4.2)
-      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
-      .slice(0, 6);
+    // Show top-rated venues; if none have ratings show highest crowd count
+    const rated = nearbyVenues.filter(v => (v.rating ?? 0) > 0);
+    if (rated.length > 0) {
+      return rated.sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 6);
+    }
+    // Fallback: sort by crowd count
+    return [...nearbyVenues].sort((a, b) => (b.currentCount || 0) - (a.currentCount || 0)).slice(0, 6);
   };
 
   const getMostViewed = () => {
@@ -185,7 +191,10 @@ export default function HomeScreen() {
   };
 
   const getRecentlyViewed = () => {
-    return nearbyVenues.slice(2, 5);
+    // Show last-added venues (newest first)
+    return [...nearbyVenues]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
   };
 
   const handleOfferPress = (offerId: string) => {
@@ -280,76 +289,84 @@ export default function HomeScreen() {
         )}
 
         {/* Featured on Tipzy Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Featured on Tipzy</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.venuesContainer}
-          >
-            {getFeaturedVenues().map((venue) => (
-              <SquareVenueCard
-                key={venue.id}
-                venue={venue}
-                onPress={() => handleVenuePress(venue.id)}
-              />
-            ))}
-          </ScrollView>
-        </View>
+        {getFeaturedVenues().length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Featured on Tipzy</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.venuesContainer}
+            >
+              {getFeaturedVenues().map((venue) => (
+                <SquareVenueCard
+                  key={venue.id}
+                  venue={venue}
+                  onPress={() => handleVenuePress(venue.id)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Places You'll Like Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Places You&apos;ll Like</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.venuesContainer}
-          >
-            {getPlacesYoullLike().map((venue) => (
-              <SquareVenueCard
-                key={venue.id}
-                venue={venue}
-                onPress={() => handleVenuePress(venue.id)}
-              />
-            ))}
-          </ScrollView>
-        </View>
+        {getPlacesYoullLike().length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Places You&apos;ll Like</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.venuesContainer}
+            >
+              {getPlacesYoullLike().map((venue) => (
+                <SquareVenueCard
+                  key={venue.id}
+                  venue={venue}
+                  onPress={() => handleVenuePress(venue.id)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Most Viewed Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Most Viewed</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.venuesContainer}
-          >
-            {getMostViewed().map((venue) => (
-              <SquareVenueCard
-                key={venue.id}
-                venue={venue}
-                onPress={() => handleVenuePress(venue.id)}
-              />
-            ))}
-          </ScrollView>
-        </View>
+        {getMostViewed().length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Most Viewed</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.venuesContainer}
+            >
+              {getMostViewed().map((venue) => (
+                <SquareVenueCard
+                  key={venue.id}
+                  venue={venue}
+                  onPress={() => handleVenuePress(venue.id)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Recently Viewed Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recently Viewed</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.venuesContainer}
-          >
-            {getRecentlyViewed().map((venue) => (
-              <SquareVenueCard
-                key={venue.id}
-                venue={venue}
-                onPress={() => handleVenuePress(venue.id)}
-              />
-            ))}
-          </ScrollView>
-        </View>
+        {getRecentlyViewed().length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recently Viewed</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.venuesContainer}
+            >
+              {getRecentlyViewed().map((venue) => (
+                <SquareVenueCard
+                  key={venue.id}
+                  venue={venue}
+                  onPress={() => handleVenuePress(venue.id)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* All Venues (Filtered/Sorted) Section */}
         {(searchQuery.trim() || selectedSort !== 'nearby') && (
