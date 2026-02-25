@@ -9,7 +9,7 @@
  * All routes require a valid JWT with role=admin.
  */
 import { Hono } from "hono";
-import { requireAuth, requireRole, hashPassword } from "../auth";
+import { requireAuth, requireRole, hashPassword, verifyPassword, signAccessToken, signRefreshToken } from "../auth";
 import { query, type DbUser } from "../db";
 import { sendBusinessApprovedEmail, sendBusinessRejectedEmail } from "../email";
 
@@ -97,6 +97,24 @@ admin.get("/approve-business/:token", async (c) => {
   </div>
 </body>
 </html>`, 200);
+});
+
+// Admin login – only accepts users with role='admin'
+admin.post("/login", async (c) => {
+  let body: { email?: string; password?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+  const { email, password } = body;
+  if (!email || !password) return c.json({ error: "email and password are required" }, 400);
+  const res = await query<DbUser>("SELECT * FROM users WHERE email = $1", [email.trim().toLowerCase()]);
+  const user = res.rows[0];
+  if (!user || !(await verifyPassword(password, user.password_hash))) {
+    return c.json({ error: "Invalid email or password" }, 401);
+  }
+  if (user.role !== "admin") return c.json({ error: "Not an admin account" }, 403);
+  const accessToken = await signAccessToken(user.id, user.email, "admin");
+  const refreshToken = await signRefreshToken(user.id, "admin");
+  await query("INSERT INTO refresh_tokens (token, user_id) VALUES ($1, $2)", [refreshToken, user.id]);
+  return c.json({ token: accessToken, refreshToken, user: { id: user.id, email: user.email, name: user.name, role: "admin" } });
 });
 
 // All admin routes require authentication + admin role
@@ -207,6 +225,22 @@ admin.patch("/users/:id/reset-password", async (c) => {
   const newHash = await hashPassword(newPassword);
   await query("UPDATE users SET password_hash = $1 WHERE id = $2", [newHash, id]);
   return c.json({ message: "Password reset successfully" });
+});
+
+// Resend business approval email
+admin.post("/business/:id/resend-approval", async (c) => {
+  const id = c.req.param("id");
+  const res = await query<DbUser>("SELECT id, email, name, business_name, business_status FROM users WHERE id = $1", [id]);
+  const user = res.rows[0];
+  if (!user) return c.json({ error: "User not found" }, 404);
+  if (user.business_status !== "approved") return c.json({ error: "Business is not approved yet" }, 400);
+  try {
+    await sendBusinessApprovedEmail(user.email, user.name, user.business_name ?? user.name);
+  } catch (err) {
+    console.error("[admin] Failed to resend approval email:", err);
+    return c.json({ error: "Failed to send email" }, 500);
+  }
+  return c.json({ message: `Approval email resent to ${user.email}` });
 });
 
 // List all venues (admin)
