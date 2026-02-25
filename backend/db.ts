@@ -250,6 +250,7 @@ const initPromise = (async () => {
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT;");
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_subject TEXT;");
   await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS users_provider_subject_unique ON users (auth_provider, provider_subject) WHERE provider_subject IS NOT NULL;");
+  await pool.query("ALTER TABLE venues ADD COLUMN IF NOT EXISTS featured_rank INTEGER NOT NULL DEFAULT 0;");
 
   await ensureAdminSeed();
   await ensureTestCustomerSeed();
