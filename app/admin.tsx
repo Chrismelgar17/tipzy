@@ -65,6 +65,12 @@ export default function AdminScreen() {
   const [rejectReason, setRejectReason] = useState('');
   const [selectedRejectId, setSelectedRejectId] = useState<string | null>(null);
 
+  // Featured rank editing
+  const [apiVenues, setApiVenues] = useState<{ id: string; name: string; address: string; status: string; featured_rank: number }[]>([]);
+  const [showRankModal, setShowRankModal] = useState(false);
+  const [rankVenue, setRankVenue] = useState<{ id: string; name: string; featured_rank: number } | null>(null);
+  const [newRank, setNewRank] = useState('');
+
   // Mock analytics data
   const analytics = {
     totalRevenue: orders.reduce((sum, order) => sum + order.amountTotal, 0),
@@ -78,7 +84,17 @@ export default function AdminScreen() {
   // Fetch pending business requests on mount
   useEffect(() => {
     void fetchPendingBusinesses();
+    void fetchApiVenues();
   }, []);
+
+  const fetchApiVenues = async () => {
+    try {
+      const res = await api.get('/admin/venues');
+      setApiVenues(res.data.venues ?? []);
+    } catch (err) {
+      console.warn('[Admin] Could not load venues:', err);
+    }
+  };
 
   const fetchPendingBusinesses = async () => {
     setLoadingRequests(true);
@@ -129,6 +145,23 @@ export default function AdminScreen() {
       Alert.alert('Rejected', 'Business rejected. The owner has been notified by email.');
     } catch {
       Alert.alert('Error', 'Could not reject. Please try again.');
+    }
+  };
+
+  const handleSaveRank = async () => {
+    if (!rankVenue) return;
+    const rank = parseInt(newRank, 10);
+    if (isNaN(rank) || rank < 0) {
+      Alert.alert('Invalid', 'Enter a number ≥ 0 (0 = not featured)');
+      return;
+    }
+    try {
+      await api.patch(`/admin/venues/${rankVenue.id}/featured-rank`, { featuredRank: rank });
+      setApiVenues(prev => prev.map(v => v.id === rankVenue.id ? { ...v, featured_rank: rank } : v));
+      setShowRankModal(false);
+      Alert.alert('✅ Updated', `"${rankVenue.name}" rank set to ${rank}`);
+    } catch {
+      Alert.alert('Error', 'Failed to update rank. Please try again.');
     }
   };
 
@@ -331,7 +364,39 @@ export default function AdminScreen() {
             ))
           )}
         </View>
-
+        {/* Venue Featured Ranks */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Venue Featured Ranks</Text>
+            <TouchableOpacity onPress={fetchApiVenues} style={styles.refreshButton}>
+              <Text style={styles.refreshText}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+          {apiVenues.length === 0 ? (
+            <View style={styles.emptyRequests}>
+              <Text style={styles.emptyRequestsText}>No venues found</Text>
+            </View>
+          ) : (
+            apiVenues.map(v => (
+              <View key={v.id} style={styles.businessRequestCard}>
+                <View style={styles.bizInfo}>
+                  <Text style={styles.bizName}>{v.name}</Text>
+                  <Text style={styles.bizEmail}>{v.address || 'No address'}</Text>
+                  <Text style={[styles.bizDate, { color: v.featured_rank > 0 ? theme.colors.purple : theme.colors.text.tertiary }]}>
+                    Featured rank: {v.featured_rank} {v.featured_rank === 0 ? '(not featured)' : '⭐'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.approveButton}
+                  onPress={() => { setRankVenue(v); setNewRank(String(v.featured_rank)); setShowRankModal(true); }}
+                >
+                  <Edit3 size={14} color={theme.colors.white} />
+                  <Text style={styles.bizActionText}>Set Rank</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+        </View>
         {/* Quick Actions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -542,6 +607,44 @@ export default function AdminScreen() {
               >
                 <XCircle size={16} color={theme.colors.white} />
                 <Text style={styles.saveButtonText}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Featured Rank Modal */}
+      <Modal visible={showRankModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Set Featured Rank</Text>
+              <TouchableOpacity onPress={() => setShowRankModal(false)}>
+                <X size={24} color={theme.colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.bizName}>{rankVenue?.name}</Text>
+              <Text style={[styles.bizEmail, { marginBottom: 12 }]}>
+                0 = not featured · 1 = highest priority · higher number = lower priority
+              </Text>
+              <Text style={styles.inputLabel}>Featured Rank</Text>
+              <TextInput
+                style={styles.textInput}
+                value={newRank}
+                onChangeText={setNewRank}
+                keyboardType="numeric"
+                placeholder="e.g. 1"
+                placeholderTextColor={theme.colors.text.tertiary}
+              />
+            </View>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowRankModal(false)}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveButton} onPress={handleSaveRank}>
+                <Save size={16} color={theme.colors.white} />
+                <Text style={styles.saveButtonText}>Save Rank</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -53,7 +53,7 @@ admin.get("/approve-business/:token", async (c) => {
 
   // Approve the user account and their venue(s)
   await query("UPDATE users SET business_status = 'approved' WHERE id = $1", [userId]);
-  await query("UPDATE venues SET status = 'approved' WHERE owner_user_id = $1", [userId]);
+  await query("UPDATE venues SET status = 'approved', featured_rank = GREATEST(featured_rank, 1) WHERE owner_user_id = $1", [userId]);
 
   // Consume the token so it cannot be reused
   await query("DELETE FROM business_approval_tokens WHERE token = $1", [token]);
@@ -146,7 +146,7 @@ admin.patch("/business/:id/approve", async (c) => {
   if (user.role !== "business") return c.json({ error: "Not a business account" }, 400);
 
   await query("UPDATE users SET business_status = 'approved' WHERE id = $1", [id]);
-  await query("UPDATE venues SET status = 'approved' WHERE owner_user_id = $1", [id]);
+  await query("UPDATE venues SET status = 'approved', featured_rank = GREATEST(featured_rank, 1) WHERE owner_user_id = $1", [id]);
 
   // Notify the business owner by email
   try {
@@ -207,6 +207,32 @@ admin.patch("/users/:id/reset-password", async (c) => {
   const newHash = await hashPassword(newPassword);
   await query("UPDATE users SET password_hash = $1 WHERE id = $2", [newHash, id]);
   return c.json({ message: "Password reset successfully" });
+});
+
+// List all venues (admin)
+admin.get("/venues", async (c) => {
+  const res = await query<{ id: string; name: string; address: string; status: string; featured_rank: number; owner_user_id: string }>(
+    "SELECT id, name, address, status, featured_rank, owner_user_id FROM venues ORDER BY featured_rank DESC, name ASC",
+  );
+  return c.json({ venues: res.rows });
+});
+
+// Update a venue's featured rank
+admin.patch("/venues/:id/featured-rank", async (c) => {
+  const venueId = c.req.param("id");
+  let body: { featuredRank?: number };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const { featuredRank } = body;
+  if (typeof featuredRank !== "number" || featuredRank < 0 || !Number.isInteger(featuredRank)) {
+    return c.json({ error: "featuredRank must be a non-negative integer" }, 400);
+  }
+
+  const check = await query("SELECT id FROM venues WHERE id = $1", [venueId]);
+  if (!check.rowCount) return c.json({ error: "Venue not found" }, 404);
+
+  await query("UPDATE venues SET featured_rank = $1 WHERE id = $2", [featuredRank, venueId]);
+  return c.json({ message: "Featured rank updated", venueId, featuredRank });
 });
 
 export default admin;
