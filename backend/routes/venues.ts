@@ -43,7 +43,7 @@ function rowToVenue(v: DbVenue) {
     rating: v.rating,
     status: v.status,
     createdAt: v.created_at,
-    featuredRank: 0,
+    featuredRank: v.featured_rank ?? 0,
   };
 }
 
