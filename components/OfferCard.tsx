@@ -21,7 +21,7 @@ interface Offer {
   description: string;
   discount: number;
   image: string;
-  validUntil: Date;
+  validUntil?: Date | string | null;
   isActive: boolean;
 }
 

@@ -7,11 +7,19 @@
  * POST /api/business/change-password
  *
  * Business management routes (require business/admin role)
- * GET   /api/business/venues               – list venues owned by this business
- * GET   /api/business/venues/:id/capacity  – real-time capacity for owned venue
- * GET   /api/business/orders               – list orders for owned venues
- * PATCH /api/business/orders/:id/status    – update order business_status
- * GET   /api/business/dashboard            – dashboard stats for owned venue
+ * GET    /api/business/venues               – list venues owned by this business
+ * GET    /api/business/venues/:id/capacity  – real-time capacity for owned venue
+ * GET    /api/business/orders               – list orders for owned venues
+ * PATCH  /api/business/orders/:id/status    – update order business_status
+ * GET    /api/business/dashboard            – dashboard stats for owned venue
+ * GET    /api/business/offers               – list offers for owned venues
+ * POST   /api/business/offers               – create an offer
+ * PATCH  /api/business/offers/:id/status    – toggle offer status
+ * DELETE /api/business/offers/:id           – delete an offer
+ * GET    /api/business/events               – list events for owned venues
+ * POST   /api/business/events               – create an event
+ * PATCH  /api/business/events/:id/status    – update event status
+ * DELETE /api/business/events/:id           – delete an event
  */
 import { Hono } from "hono";
 import {
@@ -23,7 +31,7 @@ import {
   requireAuth,
   requireRole,
 } from "../auth";
-import { query, type DbUser, type DbOrder, type DbVenue } from "../db";
+import { query, type DbUser, type DbOrder, type DbVenue, type DbOffer, type DbEvent } from "../db";
 import { sendBusinessApprovalRequestEmail, type BusinessApprovalData } from "../email";
 
 const business = new Hono();
@@ -554,6 +562,186 @@ business.get("/dashboard", requireAuth, requireRole("business", "admin"), async 
     weeklyViews: weeklyViewsChart.reduce((s, d) => s + d.value, 0),
     weeklyViewsChart,
   });
+});
+
+// ── Offers ───────────────────────────────────────────────────────────────────
+
+// GET /api/business/offers – list offers for this business's venues
+business.get("/offers", requireAuth, requireRole("business", "admin"), async (c) => {
+  const userId = (c as any).get("userId");
+  const userRole = (c as any).get("role");
+
+  let sql = `
+    SELECT o.*, v.name AS venue_name
+    FROM offers o
+    JOIN venues v ON v.id = o.venue_id
+  `;
+  const params: any[] = [];
+  if (userRole !== "admin") {
+    sql += " WHERE o.owner_user_id = $1";
+    params.push(userId);
+  }
+  sql += " ORDER BY o.created_at DESC";
+
+  const res = await query<DbOffer & { venue_name: string }>(sql, params);
+  return c.json({ offers: res.rows });
+});
+
+// POST /api/business/offers – create a new offer
+business.post("/offers", requireAuth, requireRole("business", "admin"), async (c) => {
+  const userId = (c as any).get("userId");
+  let body: { name?: string; discount?: number; description?: string; endDate?: string; venueId?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const { name, discount, description, endDate, venueId } = body;
+  if (!name || discount === undefined || !venueId) {
+    return c.json({ error: "name, discount, and venueId are required" }, 400);
+  }
+
+  const check = await assertVenueOwner(userId, (c as any).get("role"), venueId);
+  if (check === "not_found") return c.json({ error: "Venue not found" }, 404);
+  if (check === "forbidden") return c.json({ error: "Forbidden" }, 403);
+
+  const id = crypto.randomUUID?.() ?? `offer_${Date.now()}`;
+  const res = await query<DbOffer>(
+    `INSERT INTO offers (id, venue_id, owner_user_id, name, discount, description, end_date)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [id, venueId, userId, name.trim(), Number(discount), description ?? null, endDate ?? null],
+  );
+  return c.json({ offer: res.rows[0], message: "Offer created" }, 201);
+});
+
+// PATCH /api/business/offers/:id/status – toggle active/suspended
+business.patch("/offers/:id/status", requireAuth, requireRole("business", "admin"), async (c) => {
+  const offerId = c.req.param("id");
+  const userId = (c as any).get("userId");
+  const userRole = (c as any).get("role");
+
+  let body: { status?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const { status } = body;
+  if (status !== "active" && status !== "suspended") {
+    return c.json({ error: "status must be 'active' or 'suspended'" }, 400);
+  }
+
+  const offerRes = await query<{ venue_id: string }>("SELECT venue_id FROM offers WHERE id = $1", [offerId]);
+  if (!offerRes.rowCount) return c.json({ error: "Offer not found" }, 404);
+
+  const check = await assertVenueOwner(userId, userRole, offerRes.rows[0].venue_id);
+  if (check === "forbidden") return c.json({ error: "Forbidden" }, 403);
+
+  const updated = await query<DbOffer>(
+    "UPDATE offers SET status = $1, updated_at = now() WHERE id = $2 RETURNING *",
+    [status, offerId],
+  );
+  return c.json({ offer: updated.rows[0] });
+});
+
+// DELETE /api/business/offers/:id
+business.delete("/offers/:id", requireAuth, requireRole("business", "admin"), async (c) => {
+  const offerId = c.req.param("id");
+  const userId = (c as any).get("userId");
+  const userRole = (c as any).get("role");
+
+  const offerRes = await query<{ venue_id: string }>("SELECT venue_id FROM offers WHERE id = $1", [offerId]);
+  if (!offerRes.rowCount) return c.json({ error: "Offer not found" }, 404);
+
+  const check = await assertVenueOwner(userId, userRole, offerRes.rows[0].venue_id);
+  if (check === "forbidden") return c.json({ error: "Forbidden" }, 403);
+
+  await query("DELETE FROM offers WHERE id = $1", [offerId]);
+  return c.json({ message: "Offer deleted" });
+});
+
+// ── Events ───────────────────────────────────────────────────────────────────
+
+// GET /api/business/events – list events for this business's venues
+business.get("/events", requireAuth, requireRole("business", "admin"), async (c) => {
+  const userId = (c as any).get("userId");
+  const userRole = (c as any).get("role");
+
+  let sql = `
+    SELECT e.*, v.name AS venue_name
+    FROM events e
+    JOIN venues v ON v.id = e.venue_id
+  `;
+  const params: any[] = [];
+  if (userRole !== "admin") {
+    sql += " WHERE e.owner_user_id = $1";
+    params.push(userId);
+  }
+  sql += " ORDER BY e.event_date DESC, e.created_at DESC";
+
+  const res = await query<DbEvent & { venue_name: string }>(sql, params);
+  return c.json({ events: res.rows });
+});
+
+// POST /api/business/events – create a new event
+business.post("/events", requireAuth, requireRole("business", "admin"), async (c) => {
+  const userId = (c as any).get("userId");
+  let body: { name?: string; description?: string; date?: string; time?: string; image?: string; venueId?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const { name, description, date, time, image, venueId } = body;
+  if (!name || !date || !time || !venueId) {
+    return c.json({ error: "name, date, time, and venueId are required" }, 400);
+  }
+
+  const check = await assertVenueOwner(userId, (c as any).get("role"), venueId);
+  if (check === "not_found") return c.json({ error: "Venue not found" }, 404);
+  if (check === "forbidden") return c.json({ error: "Forbidden" }, 403);
+
+  const id = crypto.randomUUID?.() ?? `event_${Date.now()}`;
+  const res = await query<DbEvent>(
+    `INSERT INTO events (id, venue_id, owner_user_id, name, description, event_date, event_time, image)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [id, venueId, userId, name.trim(), description ?? null, date, time, image ?? null],
+  );
+  return c.json({ event: res.rows[0], message: "Event created" }, 201);
+});
+
+// PATCH /api/business/events/:id/status – update event status
+business.patch("/events/:id/status", requireAuth, requireRole("business", "admin"), async (c) => {
+  const eventId = c.req.param("id");
+  const userId = (c as any).get("userId");
+  const userRole = (c as any).get("role");
+
+  let body: { status?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const { status } = body;
+  if (!(["draft", "published", "cancelled"] as const).includes(status as any)) {
+    return c.json({ error: "status must be 'draft', 'published', or 'cancelled'" }, 400);
+  }
+
+  const eventRes = await query<{ venue_id: string }>("SELECT venue_id FROM events WHERE id = $1", [eventId]);
+  if (!eventRes.rowCount) return c.json({ error: "Event not found" }, 404);
+
+  const check = await assertVenueOwner(userId, userRole, eventRes.rows[0].venue_id);
+  if (check === "forbidden") return c.json({ error: "Forbidden" }, 403);
+
+  const updated = await query<DbEvent>(
+    "UPDATE events SET status = $1, updated_at = now() WHERE id = $2 RETURNING *",
+    [status, eventId],
+  );
+  return c.json({ event: updated.rows[0] });
+});
+
+// DELETE /api/business/events/:id
+business.delete("/events/:id", requireAuth, requireRole("business", "admin"), async (c) => {
+  const eventId = c.req.param("id");
+  const userId = (c as any).get("userId");
+  const userRole = (c as any).get("role");
+
+  const eventRes = await query<{ venue_id: string }>("SELECT venue_id FROM events WHERE id = $1", [eventId]);
+  if (!eventRes.rowCount) return c.json({ error: "Event not found" }, 404);
+
+  const check = await assertVenueOwner(userId, userRole, eventRes.rows[0].venue_id);
+  if (check === "forbidden") return c.json({ error: "Forbidden" }, 403);
+
+  await query("DELETE FROM events WHERE id = $1", [eventId]);
+  return c.json({ message: "Event deleted" });
 });
 
 export default business;

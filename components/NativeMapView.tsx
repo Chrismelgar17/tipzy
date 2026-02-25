@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Platform, Animated, Easing } from 'react-native';
-import { User } from 'lucide-react-native';
+import { Svg, Path, Line, Circle as SvgCircle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { theme } from '@/constants/theme';
 import { Venue } from '@/types/models';
 
@@ -78,7 +78,7 @@ interface NativeMapViewProps {
   userLocation?: { latitude: number; longitude: number } | null;
 }
 
-// Animated pulsing ring for user location
+// Animated pulsing ring for user location — Tipzy neon martini glass logo
 function UserLocationMarker() {
   const pulse = useRef(new Animated.Value(0)).current;
 
@@ -87,7 +87,7 @@ function UserLocationMarker() {
       Animated.sequence([
         Animated.timing(pulse, {
           toValue: 1,
-          duration: 1500,
+          duration: 1600,
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }),
@@ -100,21 +100,55 @@ function UserLocationMarker() {
     ).start();
   }, [pulse]);
 
-  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.4] });
-  const ringOpacity = pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.6, 0.3, 0] });
+  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] });
+  const ringOpacity = pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.55, 0.25, 0] });
 
   return (
     <View style={styles.userLocationWrapper}>
-      {/* Pulsing ring */}
+      {/* Pulsing ring — white */}
       <Animated.View
         style={[
           styles.userLocationRing,
           { transform: [{ scale: ringScale }], opacity: ringOpacity },
         ]}
       />
-      {/* Inner dot with person icon */}
+      {/* Circular dark badge */}
       <View style={styles.userLocationDot}>
-        <User size={18} color="#FFFFFF" strokeWidth={2.5} />
+        {/* Tipzy martini glass — white with gradient shimmer */}
+        <Svg width={28} height={32} viewBox="0 0 64 72">
+          <Defs>
+            {/* Subtle top-to-bottom shimmer inside the glass bowl */}
+            <LinearGradient id="bowlGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.18" />
+              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0.04" />
+            </LinearGradient>
+            {/* Garnish fill */}
+            <LinearGradient id="garnishGrad" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.22" />
+              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0.06" />
+            </LinearGradient>
+          </Defs>
+          {/* Glass bowl filled with gradient shimmer */}
+          <Path
+            d="M 4,16 L 60,16 L 32,50 Z"
+            fill="url(#bowlGrad)"
+            stroke="#FFFFFF"
+            strokeWidth="3.5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {/* Stem */}
+          <Line x1="32" y1="50" x2="32" y2="62" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" />
+          {/* Base */}
+          <Line x1="19" y1="62" x2="45" y2="62" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" />
+          {/* Straw (diagonal, upper-left) */}
+          <Line x1="23" y1="16" x2="11" y2="4" stroke="rgba(255,255,255,0.75)" strokeWidth="3" strokeLinecap="round" />
+          {/* Citrus garnish — circle on right rim */}
+          <SvgCircle cx="57" cy="10" r="9" fill="url(#garnishGrad)" stroke="#FFFFFF" strokeWidth="2.5" />
+          {/* Citrus segments */}
+          <Line x1="48" y1="10" x2="66" y2="10" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" strokeLinecap="round" />
+          <Line x1="57" y1="1" x2="57" y2="19" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" strokeLinecap="round" />
+        </Svg>
       </View>
     </View>
   );
@@ -167,11 +201,13 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, u
   // Center on user location if available, else first venue, else US fallback
   const initialRegion = useMemo(() => {
     if (userLocation) {
+      // Show roughly a 25-mile radius around the user.
+      // 1° latitude ≈ 69 miles → 50 mile span (radius 25) ≈ 0.72°. Use 0.75 for padding.
       return {
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
+        latitudeDelta: 0.75,
+        longitudeDelta: 0.75,
       };
     }
     if (mappableVenues.length === 0) return US_FALLBACK_REGION;
@@ -201,6 +237,7 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, u
         style={styles.map}
         initialRegion={initialRegion}
         customMapStyle={mapStyle}
+        userInterfaceStyle="dark"
         minZoomLevel={10}
         maxZoomLevel={19}
         showsUserLocation={false}
@@ -210,7 +247,7 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, u
           <Marker
             coordinate={userLocation}
             anchor={{ x: 0.5, y: 0.5 }}
-            tracksViewChanges={false}
+            tracksViewChanges={true}
           >
             <UserLocationMarker />
           </Marker>
@@ -288,27 +325,34 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   userLocationWrapper: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
     justifyContent: 'center',
     alignItems: 'center',
   },
   userLocationRing: {
     position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 75, 75, 0.35)',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 75, 75, 0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.45)',
   },
   userLocationDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'red', // Change the color to red
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(10, 6, 20, 0.88)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 8,
   },
   legend: {
     position: 'absolute',

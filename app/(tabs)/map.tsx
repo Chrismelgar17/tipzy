@@ -19,8 +19,11 @@ import * as Location from 'expo-location';
 
 // Import NativeMapView - Metro will automatically choose the right platform file
 import NativeMapView from '@/components/NativeMapView';
+import { distanceMiles } from '@/utils/distance';
 
 const { height } = Dimensions.get('window');
+
+const MAX_RADIUS_MILES = 25;
 
 
 
@@ -91,9 +94,9 @@ export default function MapScreen() {
 
 
   const getMarkerColor = (crowdCount: number) => {
-    if (crowdCount >= 100) return '#FF6B6B'; // Red for 100+
-    if (crowdCount >= 50) return '#FFD93D';  // Yellow for 50-99
-    return '#6BCF7F'; // Green for <50
+    if (crowdCount >= 100) return '#FF6B6B';
+    if (crowdCount >= 50) return '#FFD93D';
+    return '#6BCF7F';
   };
 
   const getCrowdLabel = (crowdCount: number) => {
@@ -102,11 +105,25 @@ export default function MapScreen() {
     return 'Not Crowded';
   };
 
+  // Only show venues within MAX_RADIUS_MILES of the user.
+  // Fall back to all venues if location permission was denied.
+  const nearbyVenues = userLocation
+    ? venues.filter(
+        (v) =>
+          v.geo &&
+          distanceMiles(
+            userLocation.latitude,
+            userLocation.longitude,
+            v.geo.lat,
+            v.geo.lng,
+          ) <= MAX_RADIUS_MILES,
+      )
+    : venues;
+
   const renderMapView = () => {
-    // Use platform-specific NativeMapView component
     return (
       <NativeMapView
-        venues={venues}
+        venues={nearbyVenues}
         onMarkerPress={handleMarkerPress}
         getMarkerColor={getMarkerColor}
         userLocation={userLocation}

@@ -81,6 +81,33 @@ export interface DbPasswordReset {
   expires_at: string;
 }
 
+export interface DbOffer {
+  id: string;
+  venue_id: string;
+  owner_user_id: string;
+  name: string;
+  discount: number;
+  description: string | null;
+  end_date: string | null;
+  status: 'active' | 'suspended';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbEvent {
+  id: string;
+  venue_id: string;
+  owner_user_id: string;
+  name: string;
+  description: string | null;
+  event_date: string;
+  event_time: string;
+  image: string | null;
+  status: 'draft' | 'published' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+}
+
 const connectionString = process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/tipzy";
 
 export const pool = new Pool({
@@ -189,6 +216,33 @@ const initPromise = (async () => {
       viewed_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS venue_views_venue_idx ON venue_views (venue_id, viewed_at DESC);
+
+    CREATE TABLE IF NOT EXISTS offers (
+      id TEXT PRIMARY KEY,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      discount INTEGER NOT NULL,
+      description TEXT,
+      end_date DATE,
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS events (
+      id TEXT PRIMARY KEY,
+      venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+      owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT,
+      event_date DATE NOT NULL,
+      event_time TEXT NOT NULL,
+      image TEXT,
+      status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('draft','published','cancelled')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 
   // Backfill column for existing deployments

@@ -29,6 +29,7 @@ import { useAuth } from '@/hooks/auth-context';
 import { useCapacity, CROWD_COLOR_HEX, crowdColorLabel } from '@/hooks/capacity-context';
 import { BusinessDashboardStats } from '@/types/models';
 import api from '@/lib/api';
+import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
@@ -53,6 +54,7 @@ export default function BusinessDashboard() {
   const [stats, setStats] = useState<BusinessDashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [venueIdResolved, setVenueIdResolved] = useState<string | null>(null);
+  const [selectedBar, setSelectedBar] = useState<{ label: string; value: number; index: number } | null>(null);
 
   // â”€â”€ fetch owned venue & stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadDashboard = useCallback(async () => {
@@ -332,11 +334,39 @@ export default function BusinessDashboard() {
       justifyContent: 'space-between',
       paddingHorizontal: theme.spacing.sm,
     },
+    chartBarCol: {
+      alignItems: 'center',
+      width: (width - theme.spacing.lg * 2 - theme.spacing.lg * 2 - theme.spacing.sm * 2) / 7,
+    },
     chartBar: {
       width: (width - theme.spacing.lg * 2 - theme.spacing.lg * 2 - theme.spacing.sm * 2) / 7 - 8,
       backgroundColor: theme.colors.purple,
       borderRadius: 4,
-      marginHorizontal: 4,
+    },
+    chartTooltip: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 6,
+      paddingHorizontal: 5,
+      paddingVertical: 4,
+      marginBottom: 4,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: `${theme.colors.purple}50`,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.18,
+      shadowRadius: 3,
+      elevation: 4,
+    },
+    chartTooltipLabel: {
+      fontSize: 9,
+      fontWeight: '500',
+      color: theme.colors.text.secondary,
+    },
+    chartTooltipValue: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.purple,
     },
     chartLabels: {
       flexDirection: 'row',
@@ -607,7 +637,7 @@ export default function BusinessDashboard() {
                   <TouchableOpacity
                     key={type}
                     style={[styles.toggleButton, selectedChart === type && styles.toggleButtonActive]}
-                    onPress={() => setSelectedChart(type)}
+                    onPress={() => { setSelectedChart(type); setSelectedBar(null); }}
                     testID={`${type}-toggle`}
                   >
                     <Text style={[styles.toggleText, selectedChart === type && styles.toggleTextActive]}>
@@ -619,9 +649,28 @@ export default function BusinessDashboard() {
             </View>
 
             <View style={styles.chartContainer}>
-              {getChartData().map((item, index) => (
-                <View key={index} style={[styles.chartBar, { height: (item.value / maxValue) * 160 }]} />
-              ))}
+              {getChartData().map((item, index) => {
+                const barHeight = maxValue > 0 ? (item.value / maxValue) * 160 : 4;
+                const isSelected = selectedBar?.index === index;
+                return (
+                  <View key={index} style={styles.chartBarCol}>
+                    {isSelected && (
+                      <View style={styles.chartTooltip}>
+                        <Text style={styles.chartTooltipLabel}>{item.label}</Text>
+                        <Text style={styles.chartTooltipValue}>{item.value}</Text>
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={[styles.chartBar, {
+                        height: barHeight,
+                        backgroundColor: isSelected ? theme.colors.purpleLight ?? `${theme.colors.purple}bb` : theme.colors.purple,
+                      }]}
+                      onPress={() => setSelectedBar(isSelected ? null : { label: item.label, value: item.value, index })}
+                      activeOpacity={0.75}
+                    />
+                  </View>
+                );
+              })}
             </View>
             <View style={styles.chartLabels}>
               {getChartData().map((item, index) => (
@@ -634,28 +683,28 @@ export default function BusinessDashboard() {
           <View style={styles.quickActions}>
             <Text style={styles.quickActionsTitle}>Quick Actions</Text>
             <View style={styles.actionGrid}>
-              <TouchableOpacity style={styles.actionButton} testID="create-offer-action">
+              <TouchableOpacity style={styles.actionButton} testID="create-offer-action" onPress={() => router.push('/(business-tabs)/add')}>
                 <View style={styles.actionIcon}>
                   <BarChart3 size={24} color={theme.colors.purple} />
                 </View>
                 <Text style={styles.actionText}>Create Offer</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.actionButton} testID="create-event-action">
+              <TouchableOpacity style={styles.actionButton} testID="create-event-action" onPress={() => router.push('/(business-tabs)/add')}>
                 <View style={styles.actionIcon}>
                   <Calendar size={24} color={theme.colors.cyan} />
                 </View>
                 <Text style={styles.actionText}>Create Event</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.actionButton} testID="view-customers-action">
+              <TouchableOpacity style={styles.actionButton} testID="view-customers-action" onPress={() => router.push('/(business-tabs)/orders')}>
                 <View style={styles.actionIcon}>
                   <Users size={24} color={theme.colors.success} />
                 </View>
                 <Text style={styles.actionText}>View Customers</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.actionButton} testID="analytics-action">
+              <TouchableOpacity style={styles.actionButton} testID="analytics-action" onPress={() => { setSelectedChart('views'); setSelectedBar(null); }}>
                 <View style={styles.actionIcon}>
                   <TrendingUp size={24} color={theme.colors.warning} />
                 </View>

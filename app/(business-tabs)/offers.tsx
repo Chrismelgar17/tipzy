@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useTheme } from '@/hooks/theme-context';
+import { useFocusEffect, router } from 'expo-router';
 import { 
   Gift, 
   Calendar, 
@@ -15,65 +19,111 @@ import {
   MoreVertical,
   Plus,
 } from 'lucide-react-native';
+import api from '@/lib/api';
 
 interface Offer {
   id: string;
+  venue_id: string;
+  venue_name: string;
   name: string;
   discount: number;
-  expirationDate: Date;
+  end_date: string | null;
   status: 'active' | 'suspended';
-  description: string;
-  usedCount: number;
-  totalCount: number;
+  description: string | null;
+  created_at: string;
 }
-
-const mockOffers: Offer[] = [
-  {
-    id: '1',
-    name: 'Happy Hour Special',
-    discount: 25,
-    expirationDate: new Date('2024-12-31'),
-    status: 'active',
-    description: '25% off all drinks during happy hour',
-    usedCount: 45,
-    totalCount: 100,
-  },
-  {
-    id: '2',
-    name: 'Weekend VIP Package',
-    discount: 15,
-    expirationDate: new Date('2024-11-30'),
-    status: 'active',
-    description: '15% off VIP table bookings',
-    usedCount: 12,
-    totalCount: 50,
-  },
-  {
-    id: '3',
-    name: 'Student Discount',
-    discount: 20,
-    expirationDate: new Date('2024-10-15'),
-    status: 'suspended',
-    description: '20% off entry with valid student ID',
-    usedCount: 8,
-    totalCount: 30,
-  },
-];
 
 type TabType = 'active' | 'suspended';
 
 export default function OffersScreen() {
   const { theme } = useTheme();
   const [selectedTab, setSelectedTab] = useState<TabType>('active');
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredOffers = mockOffers.filter(offer => offer.status === selectedTab);
+  const fetchOffers = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const res = await api.get('/business/offers');
+      setOffers(res.data?.offers ?? []);
+    } catch (err) {
+      console.error('[OffersScreen] fetch error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+  useFocusEffect(
+    useCallback(() => {
+      fetchOffers();
+    }, [fetchOffers]),
+  );
+
+  const filteredOffers = offers.filter(offer => offer.status === selectedTab);
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return 'No expiry';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const handleToggleStatus = (offer: Offer) => {
+    const newStatus = offer.status === 'active' ? 'suspended' : 'active';
+    const label = newStatus === 'active' ? 'Activate' : 'Suspend';
+    Alert.alert(
+      `${label} Offer`,
+      `Are you sure you want to ${label.toLowerCase()} "${offer.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: label,
+          onPress: async () => {
+            try {
+              await api.patch(`/business/offers/${offer.id}/status`, { status: newStatus });
+              setOffers(prev =>
+                prev.map(o => (o.id === offer.id ? { ...o, status: newStatus } : o)),
+              );
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.error ?? 'Could not update offer status.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDelete = (offer: Offer) => {
+    Alert.alert(
+      'Delete Offer',
+      `Delete "${offer.name}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete(`/business/offers/${offer.id}`);
+              setOffers(prev => prev.filter(o => o.id !== offer.id));
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.error ?? 'Could not delete offer.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleMoreOptions = (offer: Offer) => {
+    const toggleLabel = offer.status === 'active' ? 'Suspend Offer' : 'Activate Offer';
+    Alert.alert(offer.name, 'What would you like to do?', [
+      { text: toggleLabel, onPress: () => handleToggleStatus(offer) },
+      { text: 'Delete', style: 'destructive', onPress: () => handleDelete(offer) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const renderOfferCard = ({ item }: { item: Offer }) => (
@@ -99,33 +149,29 @@ export default function OffersScreen() {
             </View>
           </View>
         </View>
-        <TouchableOpacity style={styles.moreButton} testID={`more-button-${item.id}`}>
+        <TouchableOpacity
+          style={styles.moreButton}
+          onPress={() => handleMoreOptions(item)}
+          testID={`more-button-${item.id}`}
+        >
           <MoreVertical size={20} color={theme.colors.text.secondary} />
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.offerDescription}>{item.description}</Text>
+      {item.description ? (
+        <Text style={styles.offerDescription}>{item.description}</Text>
+      ) : null}
 
       <View style={styles.offerFooter}>
         <View style={styles.expirationInfo}>
           <Calendar size={16} color={theme.colors.text.secondary} />
           <Text style={styles.expirationText}>
-            Expires {formatDate(item.expirationDate)}
+            Expires {formatDate(item.end_date)}
           </Text>
         </View>
-        <View style={styles.usageInfo}>
-          <Text style={styles.usageText}>
-            {item.usedCount}/{item.totalCount} used
-          </Text>
-          <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill,
-                { width: `${(item.usedCount / item.totalCount) * 100}%` }
-              ]} 
-            />
-          </View>
-        </View>
+        {item.venue_name ? (
+          <Text style={styles.venueName}>{item.venue_name}</Text>
+        ) : null}
       </View>
     </View>
   );
@@ -230,10 +276,12 @@ export default function OffersScreen() {
       fontSize: 14,
       color: theme.colors.text.secondary,
       lineHeight: 20,
-      marginBottom: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
     },
     offerFooter: {
-      gap: theme.spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
     },
     expirationInfo: {
       flexDirection: 'row',
@@ -244,24 +292,10 @@ export default function OffersScreen() {
       fontSize: 14,
       color: theme.colors.text.secondary,
     },
-    usageInfo: {
-      gap: theme.spacing.sm,
-    },
-    usageText: {
-      fontSize: 14,
-      color: theme.colors.text.secondary,
-      textAlign: 'right',
-    },
-    progressBar: {
-      height: 4,
-      backgroundColor: theme.colors.background,
-      borderRadius: 2,
-      overflow: 'hidden',
-    },
-    progressFill: {
-      height: '100%',
-      backgroundColor: theme.colors.purple,
-      borderRadius: 2,
+    venueName: {
+      fontSize: 13,
+      color: theme.colors.text.tertiary,
+      fontStyle: 'italic',
     },
     emptyState: {
       flex: 1,
@@ -299,6 +333,12 @@ export default function OffersScreen() {
       fontWeight: '600',
       color: theme.colors.white,
     },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingVertical: theme.spacing.xxl,
+    },
   });
 
   const EmptyState = ({ type }: { type: TabType }) => (
@@ -310,13 +350,13 @@ export default function OffersScreen() {
         No {type} offers
       </Text>
       <Text style={styles.emptyDescription}>
-        {type === 'active' 
+        {type === 'active'
           ? 'Create your first offer to start attracting customers with special deals and discounts.'
-          : 'You don\'t have any suspended offers at the moment.'
+          : "You don't have any suspended offers at the moment."
         }
       </Text>
       {type === 'active' && (
-        <TouchableOpacity style={styles.createButton} testID="create-offer-button">
+        <TouchableOpacity style={styles.createButton} onPress={() => router.push('/(business-tabs)/add')} testID="create-offer-button">
           <Plus size={20} color={theme.colors.white} />
           <Text style={styles.createButtonText}>Create Offer</Text>
         </TouchableOpacity>
@@ -348,13 +388,24 @@ export default function OffersScreen() {
       </View>
 
       <View style={styles.listContainer}>
-        {filteredOffers.length > 0 ? (
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.purple} />
+          </View>
+        ) : filteredOffers.length > 0 ? (
           <FlatList
             data={filteredOffers}
             renderItem={renderOfferCard}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: theme.spacing.xl }}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => fetchOffers(true)}
+                tintColor={theme.colors.purple}
+              />
+            }
           />
         ) : (
           <EmptyState type={selectedTab} />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,13 +14,29 @@ import { Users, MapPin, Star, Clock, Search } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { SquareVenueCard } from '@/components/SquareVenueCard';
 import { OfferCard } from '@/components/OfferCard';
-import { mockOffers } from '@/mocks/venues';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/auth-context';
 import { useVenues } from '@/hooks/venues-context';
 import { SignInModal } from '@/components/SignInModal';
+import * as Location from 'expo-location';
+import { distanceMiles } from '@/utils/distance';
+import { Venue } from '@/types/models';
+import api from '@/lib/api';
 
+interface ApiOffer {
+  id: string;
+  venueId: string;
+  venueName: string;
+  title: string;
+  description: string;
+  discount: number;
+  image: string;
+  validUntil: string | null;
+  isActive: boolean;
+}
+
+const MAX_RADIUS_MILES = 25;
 type SortOption = 'busiest' | 'nearby' | 'top-rated' | 'open-now';
 
 export default function HomeScreen() {
@@ -30,6 +46,45 @@ export default function HomeScreen() {
 
   const { venues, isLoading: venuesLoading } = useVenues();
   const [searchQuery, setSearchQuery] = useState('');
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [offers, setOffers] = useState<ApiOffer[]>([]);
+
+  // Request location once on mount so we can filter venues by proximity
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+    })();
+  }, []);
+
+  // Fetch real offers from the backend
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/venues/offers');
+        setOffers(res.data?.offers ?? []);
+      } catch (err) {
+        console.warn('[HomeScreen] Could not load offers:', err);
+      }
+    })();
+  }, []);
+
+  // Only show venues within MAX_RADIUS_MILES. Fall back to all if location unavailable.
+  const nearbyVenues = useMemo(() => {
+    if (!userLocation) return venues;
+    return venues.filter(
+      (v) =>
+        v.geo &&
+        distanceMiles(
+          userLocation.latitude,
+          userLocation.longitude,
+          v.geo.lat,
+          v.geo.lng,
+        ) <= MAX_RADIUS_MILES,
+    );
+  }, [venues, userLocation]);
 
   const sortOptions: { key: SortOption; label: string; icon: any }[] = [
     { key: 'busiest', label: 'Busiest', icon: Users },
@@ -79,7 +134,7 @@ export default function HomeScreen() {
   };
 
   const getSortedVenues = () => {
-    let sorted = [...venues];
+    let sorted = [...nearbyVenues];
     
     // Filter by search query first
     if (searchQuery.trim()) {
@@ -105,22 +160,20 @@ export default function HomeScreen() {
 
   // Get different venue sections
   const getFeaturedVenues = () => {
-    return venues
+    return nearbyVenues
       .filter(venue => venue.featuredRank && venue.featuredRank <= 3)
       .sort((a, b) => (a.featuredRank || 0) - (b.featuredRank || 0));
   };
 
   const getPlacesYoullLike = () => {
-    // Based on rating and genres - simulate personalized recommendations
-    return venues
+    return nearbyVenues
       .filter(venue => (venue.rating || 0) >= 4.2)
       .sort((a, b) => (b.rating || 0) - (a.rating || 0))
       .slice(0, 6);
   };
 
   const getMostViewed = () => {
-    // Simulate most viewed based on crowd count and rating
-    return venues
+    return [...nearbyVenues]
       .sort((a, b) => {
         const scoreA = (a.currentCount || 0) * 0.6 + (a.rating || 0) * 0.4;
         const scoreB = (b.currentCount || 0) * 0.6 + (b.rating || 0) * 0.4;
@@ -130,8 +183,7 @@ export default function HomeScreen() {
   };
 
   const getRecentlyViewed = () => {
-    // For now, return a subset - in real app this would come from user's history
-    return venues.slice(2, 5);
+    return nearbyVenues.slice(2, 5);
   };
 
   const handleOfferPress = (offerId: string) => {
@@ -139,7 +191,7 @@ export default function HomeScreen() {
       console.warn('Invalid offer ID:', offerId);
       return;
     }
-    const offer = mockOffers.find(o => o.id === offerId);
+    const offer = offers.find(o => o.id === offerId);
     if (offer && offer.venueId) {
       router.push(`/venue/${offer.venueId}`);
     } else {
@@ -206,22 +258,24 @@ export default function HomeScreen() {
         )}
 
         {/* Featured Offers Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Featured Offers</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.offersContainer}
-          >
-            {mockOffers.map((offer) => (
-              <OfferCard
-                key={offer.id}
-                offer={offer}
-                onPress={() => handleOfferPress(offer.id)}
-              />
-            ))}
-          </ScrollView>
-        </View>
+        {offers.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Featured Offers</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.offersContainer}
+            >
+              {offers.map((offer) => (
+                <OfferCard
+                  key={offer.id}
+                  offer={offer as any}
+                  onPress={() => handleOfferPress(offer.id)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Featured on Tipzy Section */}
         <View style={styles.section}>
