@@ -129,8 +129,8 @@ customer.post("/provider-auth", async (c) => {
   try {
     if (provider === "google") {
       const identity = await verifyGoogleIdentity({ idToken: body.idToken, accessToken: body.accessToken });
-      if (!identity.email || !identity.emailVerified) {
-        return c.json({ error: "Google account email is not verified" }, 403);
+      if (!identity.email) {
+        return c.json({ error: "Google did not return an email address" }, 403);
       }
       normalizedEmail = identity.email.trim().toLowerCase();
       providerSubject = `google:${identity.subject}`;

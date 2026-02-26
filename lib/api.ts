@@ -63,6 +63,12 @@ api.interceptors.response.use(
       if (status === 401 && !originalRequest._retry) {
         originalRequest._retry = true;
         try {
+          // Only attempt refresh if there's actually a stored token (active session).
+          // If not, this is an unauthenticated request that simply failed — don't
+          // force a sign-out redirect, just reject the promise normally.
+          const existingToken = await secureStorage.getToken();
+          if (!existingToken) return Promise.reject(error);
+
           const { authService } = await import('./auth.service');
           const { token } = await authService.refreshTokens();
           originalRequest.headers = originalRequest.headers ?? {};

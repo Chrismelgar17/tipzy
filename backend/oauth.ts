@@ -63,7 +63,7 @@ export async function verifyGoogleIdentity(params: {
       provider: "google",
       subject: profile.sub,
       email: profile.email,
-      emailVerified: profile.email_verified === true,
+      emailVerified: profile.email_verified === true || (profile.email_verified as any) === "true",
       name: profile.name,
     };
   }
