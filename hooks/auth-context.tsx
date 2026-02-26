@@ -279,9 +279,17 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     setVerificationToken(null);
     setVerificationPreviewUrl(null);
     await AsyncStorage.setItem('user', JSON.stringify(appUser));
-    // Defer navigation so React commits setUser before the destination screen mounts
+    // Defer navigation so React commits setUser before the destination screen mounts.
+    // Navigate to profile for customers (most social sign-ins happen from the Profile tab).
     setTimeout(() => {
-      router.replace(routeForRole(response.user.role, response.user.businessStatus) as any);
+      const role = response.user.role;
+      if (role === 'admin') {
+        router.replace('/admin' as any);
+      } else if (role === 'business') {
+        router.replace((response.user.businessStatus === 'approved' ? '/(business-tabs)/dashboard' : '/(tabs)/home') as any);
+      } else {
+        router.replace('/(tabs)/profile' as any);
+      }
     }, 50);
   }, []);
 

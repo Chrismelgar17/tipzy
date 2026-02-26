@@ -29,24 +29,7 @@ export async function verifyGoogleIdentity(params: {
   idToken?: string;
   accessToken?: string;
 }): Promise<ProviderIdentity> {
-  const audiences = envList("GOOGLE_CLIENT_IDS");
-  if (!audiences.length) {
-    throw new Error("GOOGLE_CLIENT_IDS is not configured on the backend");
-  }
-
-  if (params.idToken) {
-    const { payload } = await jwtVerify(params.idToken, GOOGLE_JWKS, {
-      issuer: ["https://accounts.google.com", "accounts.google.com"],
-      audience: audiences,
-    });
-    const subject = payloadString(payload, "sub");
-    if (!subject) throw new Error("Google token does not contain sub");
-    const email = payloadString(payload, "email");
-    const emailVerified = payload.email_verified === true || payload.email_verified === "true";
-    const name = payloadString(payload, "name");
-    return { provider: "google", subject, email, emailVerified, name };
-  }
-
+  // accessToken path – calls the userinfo endpoint directly, no GOOGLE_CLIENT_IDS needed
   if (params.accessToken) {
     const res = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
       headers: { Authorization: `Bearer ${params.accessToken}` },
@@ -66,6 +49,24 @@ export async function verifyGoogleIdentity(params: {
       emailVerified: profile.email_verified === true || (profile.email_verified as any) === "true",
       name: profile.name,
     };
+  }
+
+  // idToken path – JWT verification requires audience validation via GOOGLE_CLIENT_IDS
+  if (params.idToken) {
+    const audiences = envList("GOOGLE_CLIENT_IDS");
+    if (!audiences.length) {
+      throw new Error("GOOGLE_CLIENT_IDS is not configured on the backend");
+    }
+    const { payload } = await jwtVerify(params.idToken, GOOGLE_JWKS, {
+      issuer: ["https://accounts.google.com", "accounts.google.com"],
+      audience: audiences,
+    });
+    const subject = payloadString(payload, "sub");
+    if (!subject) throw new Error("Google token does not contain sub");
+    const email = payloadString(payload, "email");
+    const emailVerified = payload.email_verified === true || payload.email_verified === "true";
+    const name = payloadString(payload, "name");
+    return { provider: "google", subject, email, emailVerified, name };
   }
 
   throw new Error("Google provider requires idToken or accessToken");
