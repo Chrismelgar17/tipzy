@@ -129,7 +129,7 @@ export const SquareVenueCard: React.FC<SquareVenueCardProps> = ({ venue, onPress
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
             <MapPin size={12} color={theme.colors.text.tertiary} />
-            <Text style={styles.infoText}>{venue.distance} mi</Text>
+            <Text style={styles.infoText}>{venue.distance != null ? Math.round(venue.distance) : '—'} mi</Text>
           </View>
           <View style={styles.infoItem}>
             <Clock size={12} color={openStatus.color} />
