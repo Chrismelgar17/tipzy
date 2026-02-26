@@ -20,6 +20,7 @@ import * as Haptics from 'expo-haptics';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { ResponseType } from 'expo-auth-session';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -42,17 +43,19 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
   const [ageConfirmed, setAgeConfirmed] = useState(false);
 
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-  const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-  // Use native client IDs — expo-auth-session uses the reverse-client-ID scheme
-  // (com.googleusercontent.apps.{id}:/) which is handled in-process without app restart.
+  const expoUsername = process.env.EXPO_PUBLIC_EXPO_USERNAME;
+  // The Expo auth proxy URI is registered as an Authorized Redirect URI in
+  // Google Cloud Console for the web client.
+  const googleRedirectUri = expoUsername
+    ? `https://auth.expo.io/@${expoUsername}/nightlife-access-app`
+    : 'https://auth.expo.io/@chrismelgar/nightlife-access-app';
   const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest(
     googleWebClientId
       ? {
           clientId: googleWebClientId,
           webClientId: googleWebClientId,
-          iosClientId: googleIosClientId,
-          androidClientId: googleAndroidClientId,
+          redirectUri: googleRedirectUri,
+          responseType: ResponseType.Token,
           scopes: ['openid', 'profile', 'email'],
         }
       : null as any,
@@ -84,8 +87,6 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
     }
     if (!googleRequest) return;
     try {
-      // No proxy URL — expo-auth-session uses the native reverse-client-ID scheme
-      // redirect URI, which is handled in-process (no app restart).
       await googlePromptAsync();
     } catch (err: any) {
       Alert.alert('Google Sign In Failed', err?.message || 'Could not start Google sign in');

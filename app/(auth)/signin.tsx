@@ -21,6 +21,7 @@ import * as Haptics from 'expo-haptics';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { ResponseType } from 'expo-auth-session';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -36,18 +37,20 @@ export default function AuthScreen() {
     password?: string;
   }>({});
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-  const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-  // Use native client IDs so expo-auth-session uses the reverse-client-ID scheme
-  // (com.googleusercontent.apps.{id}:/) which is handled in-process by the OS browser
-  // without causing an app restart/cold-start on Android.
+  const expoUsername = process.env.EXPO_PUBLIC_EXPO_USERNAME;
+  // The Expo auth proxy URI is registered as an Authorized Redirect URI in
+  // Google Cloud Console for the web client. Using it directly (no native client
+  // IDs) ensures we never generate the EAS-update URI that Google rejects.
+  const googleRedirectUri = expoUsername
+    ? `https://auth.expo.io/@${expoUsername}/nightlife-access-app`
+    : 'https://auth.expo.io/@chrismelgar/nightlife-access-app';
   const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest(
     googleWebClientId
       ? {
           clientId: googleWebClientId,
           webClientId: googleWebClientId,
-          iosClientId: googleIosClientId,
-          androidClientId: googleAndroidClientId,
+          redirectUri: googleRedirectUri,
+          responseType: ResponseType.Token,
           scopes: ['openid', 'profile', 'email'],
         }
       : null as any,
@@ -180,8 +183,11 @@ export default function AuthScreen() {
     }
     if (!googleRequest) return;
     try {
-      // No proxy URL — expo-auth-session uses the native reverse-client-ID scheme
-      // redirect URI, which is handled in-process (no app restart).
+      // promptAsync() with no custom URL: expo-auth-session opens the Google
+      // auth URL via openAuthSessionAsync (Chrome Custom Tabs on Android).
+      // The redirect_uri sent to Google is the registered Expo proxy HTTPS URL.
+      // Chrome Custom Tabs intercepts the final tipzy:// redirect in-process
+      // via onActivityResult — no Activity restart.
       await googlePromptAsync();
     } catch (err: any) {
       Alert.alert('Google Sign In Failed', err?.message || 'Could not start Google sign in');
