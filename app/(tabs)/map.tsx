@@ -23,7 +23,6 @@ import { distanceMiles } from '@/utils/distance';
 
 const { height } = Dimensions.get('window');
 
-const MAX_RADIUS_MILES = 25;
 
 
 
@@ -105,18 +104,19 @@ export default function MapScreen() {
     return 'Not Crowded';
   };
 
-  // Only show venues within MAX_RADIUS_MILES of the user.
-  // Fall back to all venues if location permission was denied.
-  // Venues with no valid geo are always included (never filtered out).
+  // Enrich venues with distance when location is known, but show ALL venues on the map.
   const nearbyVenues = userLocation
-    ? venues.filter((v) => {
-        if (!v.geo || (v.geo.lat === 0 && v.geo.lng === 0)) return true;
-        return distanceMiles(
-          userLocation.latitude,
-          userLocation.longitude,
-          v.geo.lat,
-          v.geo.lng,
-        ) <= MAX_RADIUS_MILES;
+    ? venues.map((v) => {
+        if (!v.geo || (v.geo.lat === 0 && v.geo.lng === 0)) return v;
+        return {
+          ...v,
+          distance: distanceMiles(
+            userLocation.latitude,
+            userLocation.longitude,
+            v.geo.lat,
+            v.geo.lng,
+          ),
+        };
       })
     : venues;
 

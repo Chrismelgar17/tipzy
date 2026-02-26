@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,6 @@ import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Linking from 'expo-linking';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
@@ -40,24 +39,17 @@ export default function AuthScreen() {
   }>({});
   const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
   const expoUsername = process.env.EXPO_PUBLIC_EXPO_USERNAME;
-  const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-  const googleRedirectUri = useMemo(() => {
-    if (isExpoGo && expoUsername) {
-      // Expo Auth Proxy — valid HTTPS redirect URI Google accepts
-      return `https://auth.expo.io/@${expoUsername}/nightlife-access-app`;
-    }
-    return makeRedirectUri({ scheme: 'tipzy', path: 'auth' });
-  }, [isExpoGo, expoUsername]);
+  // Always use the Expo auth proxy – this HTTPS URI is already registered with Google
+  // and works identically for Expo Go and production standalone builds.
+  const googleRedirectUri = expoUsername
+    ? `https://auth.expo.io/@${expoUsername}/nightlife-access-app`
+    : makeRedirectUri({ scheme: 'tipzy', path: 'auth' });
   const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest(
     googleWebClientId
       ? {
-          clientId: (isExpoGo && expoUsername) ? googleWebClientId : undefined,
+          clientId: googleWebClientId,
           webClientId: googleWebClientId,
-          iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-          androidClientId: (isExpoGo && expoUsername) ? undefined : process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-          // Proxy mode uses Web client which needs client_secret for code exchange;
-          // force Token (implicit) flow to get access_token directly instead.
-          responseType: (isExpoGo && expoUsername) ? ResponseType.Token : undefined,
+          responseType: ResponseType.Token,
           scopes: ['openid', 'profile', 'email'],
           redirectUri: googleRedirectUri,
         }
@@ -66,10 +58,14 @@ export default function AuthScreen() {
 
   useEffect(() => {
     if (googleResponse?.type === 'success') {
-      const idToken = googleResponse.authentication?.idToken ?? (googleResponse as any).params?.id_token;
-      const accessToken = googleResponse.authentication?.accessToken ?? (googleResponse as any).params?.access_token;
+      const accessToken = googleResponse.authentication?.accessToken
+        ?? (googleResponse as any).params?.access_token;
+      if (!accessToken) {
+        Alert.alert('Google Sign In Failed', 'No access token received from Google. Please try again.');
+        return;
+      }
       setIsLoading(true);
-      signInWithProvider('google', { idToken: idToken ?? undefined, accessToken: accessToken ?? undefined })
+      signInWithProvider('google', { accessToken })
         .catch((err: any) => Alert.alert('Google Sign In Failed', err?.message || 'Unable to sign in with Google'))
         .finally(() => setIsLoading(false));
     } else if (googleResponse?.type === 'error') {
@@ -185,31 +181,22 @@ export default function AuthScreen() {
       Alert.alert('Google Sign In Not Configured', 'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to .env and restart Expo.');
       return;
     }
-    if (isExpoGo && !expoUsername) {
-      Alert.alert(
-        'Expo Login Required',
-        'Google Sign In in Expo Go requires an Expo account:\n\n' +
-        '1. Run in terminal: bunx expo login\n' +
-        '2. Add EXPO_PUBLIC_EXPO_USERNAME=<your-username> to .env\n' +
-        '3. Add https://auth.expo.io/@<username>/nightlife-access-app\n   to Google Console → Web client → Authorized redirect URIs'
-      );
+    if (!expoUsername) {
+      Alert.alert('Config Missing', 'Add EXPO_PUBLIC_EXPO_USERNAME to .env and restart Expo.');
       return;
     }
     if (!googleRequest) return;
     try {
-      if (isExpoGo && expoUsername) {
-        // Must call /start so the proxy stores the returnUrl session;
-        // otherwise auth.expo.io can't redirect back to the app.
-        const returnUrl = Linking.createURL('expo-auth-session');
-        const authUrl = await googleRequest.makeAuthUrlAsync(Google.discovery);
-        const proxyBaseUrl = `https://auth.expo.io/@${expoUsername}/nightlife-access-app`;
-        const startUrl = `${proxyBaseUrl}/start?${new URLSearchParams({ authUrl, returnUrl })}`;
-        await googlePromptAsync({ url: startUrl });
-      } else {
-        await googlePromptAsync();
-      }
+      // Use auth proxy /start for all environments (Expo Go + standalone).
+      // The proxy stores the returnUrl so it can redirect back to the app
+      // using the correct scheme (exp:// for Expo Go, tipzy:// for standalone).
+      const returnUrl = Linking.createURL('expo-auth-session');
+      const authUrl = await googleRequest.makeAuthUrlAsync(Google.discovery);
+      const proxyBaseUrl = `https://auth.expo.io/@${expoUsername}/nightlife-access-app`;
+      const startUrl = `${proxyBaseUrl}/start?${new URLSearchParams({ authUrl, returnUrl })}`;
+      await googlePromptAsync({ url: startUrl });
     } catch (err: any) {
-      Alert.alert('Google Sign In Failed', err?.message || 'Could not start sign in');
+      Alert.alert('Google Sign In Failed', err?.message || 'Could not start Google sign in');
     }
   };
 

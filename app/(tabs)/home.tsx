@@ -36,7 +36,6 @@ interface ApiOffer {
   isActive: boolean;
 }
 
-const MAX_RADIUS_MILES = 25;
 type SortOption = 'busiest' | 'nearby' | 'top-rated' | 'open-now';
 
 export default function HomeScreen() {
@@ -71,21 +70,21 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // Only show venues within MAX_RADIUS_MILES. Fall back to all if location unavailable.
+  // Enrich venues with distance when location is known, but never filter any out
   const nearbyVenues = useMemo(() => {
     if (!userLocation) return venues;
-    return venues.filter(
-      (v) => {
-        // Include venues with no geo data so they're never hidden
-        if (!v.geo || (v.geo.lat === 0 && v.geo.lng === 0)) return true;
-        return distanceMiles(
+    return venues.map((v) => {
+      if (!v.geo || (v.geo.lat === 0 && v.geo.lng === 0)) return v;
+      return {
+        ...v,
+        distance: distanceMiles(
           userLocation.latitude,
           userLocation.longitude,
           v.geo.lat,
           v.geo.lng,
-        ) <= MAX_RADIUS_MILES;
-      }
-    );
+        ),
+      };
+    });
   }, [venues, userLocation]);
 
   const sortOptions: { key: SortOption; label: string; icon: any }[] = [
