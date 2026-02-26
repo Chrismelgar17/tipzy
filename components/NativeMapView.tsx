@@ -1,5 +1,26 @@
-import React, { useMemo, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useEffect, useRef, useState, Component } from 'react';
 import { View, Text, StyleSheet, Platform, Animated, Easing } from 'react-native';
+
+// Error boundary so a native map crash doesn't take down the whole app
+class MapErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0614' }}>
+          <Text style={{ color: '#fff', fontSize: 16, textAlign: 'center', padding: 24 }}>
+            Map failed to load.{'\n'}A Google Maps API key may be required.
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 import { Svg, Path, Line, Circle as SvgCircle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { theme } from '@/constants/theme';
 import { Venue } from '@/types/models';
@@ -7,11 +28,13 @@ import { Venue } from '@/types/models';
 // Only import react-native-maps on native platforms
 let MapView: any = null;
 let Marker: any = null;
+let PROVIDER_GOOGLE: any = null;
 
 if (Platform.OS !== 'web') {
   const maps = require('react-native-maps');
   MapView = maps.default;
   Marker = maps.Marker;
+  PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
 }
 
 // US center fallback when no valid venue coords are available
@@ -191,7 +214,15 @@ function VenueMarker({
   );
 }
 
-export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, userLocation }: NativeMapViewProps) {
+export default function NativeMapView(props: NativeMapViewProps) {
+  return (
+    <MapErrorBoundary>
+      <NativeMapViewInner {...props} />
+    </MapErrorBoundary>
+  );
+}
+
+function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocation }: NativeMapViewProps) {
   // Build list of venues that have real coordinates
   const mappableVenues = useMemo(
     () => venues.filter(v => v.geo && (v.geo.lat !== 0 || v.geo.lng !== 0)),
@@ -237,9 +268,8 @@ export default function NativeMapView({ venues, onMarkerPress, getMarkerColor, u
         style={styles.map}
         initialRegion={initialRegion}
         customMapStyle={mapStyle}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         userInterfaceStyle="dark"
-        minZoomLevel={10}
-        maxZoomLevel={19}
         showsUserLocation={false}
       >
         {/* Custom user location marker */}

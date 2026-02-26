@@ -61,6 +61,12 @@
           "origin": "https://tipzy-two.vercel.app"
         }
       ],
+      [
+        "react-native-maps",
+        {
+          "googleMapsApiKey": "AIzaSyDummyKeyReplaceWithRealOne"
+        }
+      ],
       "expo-apple-authentication",
       [
         "expo-camera",
