@@ -138,6 +138,31 @@ venues.get("/events", async (c) => {
   return c.json({ events });
 });
 
+// GET /api/venues/:id/events – upcoming published events for a specific venue
+venues.get("/:id/events", async (c) => {
+  const venueId = c.req.param("id");
+  const res = await query<DbEvent>(
+    `SELECT * FROM events
+     WHERE venue_id = $1
+       AND status = 'published'
+       AND event_date >= CURRENT_DATE
+     ORDER BY event_date ASC, event_time ASC`,
+    [venueId],
+  );
+  const events = res.rows.map(e => ({
+    id: e.id,
+    venueId: e.venue_id,
+    name: e.name,
+    description: e.description ?? "",
+    date: e.event_date,
+    time: e.event_time,
+    image: e.image ?? "",
+    status: e.status,
+    createdAt: e.created_at,
+  }));
+  return c.json({ events });
+});
+
 // GET /api/venues/:id – single approved venue
 venues.get("/:id", async (c) => {
   const id = c.req.param("id");

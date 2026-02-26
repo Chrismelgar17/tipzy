@@ -20,10 +20,10 @@ import {
   Music,
   Heart,
   Share2,
+  Calendar,
 
 } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
-import { mockEvents } from '@/mocks/venues';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@/hooks/auth-context';
 import { Venue, crowdColorFromLevel } from '@/types/models';
@@ -31,6 +31,18 @@ import * as Haptics from 'expo-haptics';
 import api from '@/lib/api';
 
 const { width, height } = Dimensions.get('window');
+
+interface ApiEvent {
+  id: string;
+  venueId: string;
+  name: string;
+  description: string;
+  date: string;
+  time: string;
+  image: string;
+  status: string;
+  createdAt: string;
+}
 
 /** Get tonight's closing time from the hours dict */
 function getTonightClosingTime(hours: Venue['hours']): string {
@@ -53,6 +65,7 @@ export default function VenueDetailScreen() {
   const [venue, setVenue] = useState<Venue | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [events, setEvents] = useState<ApiEvent[]>([]);
 
   useEffect(() => {
     const venueId = typeof id === 'string' ? id : id?.[0];
@@ -60,14 +73,16 @@ export default function VenueDetailScreen() {
     api.get<Venue>(`/venues/${venueId}`)
       .then(res => {
         setVenue(res.data);
-        // Record the view – fire-and-forget, never blocks the UI
         api.post(`/venues/${venueId}/view`).catch(() => {});
       })
       .catch(() => setNotFound(true))
       .finally(() => setIsLoading(false));
+    // Fetch events for this venue
+    api.get(`/venues/${venueId}/events`)
+      .then(res => setEvents(res.data?.events ?? []))
+      .catch(() => {});
   }, [id]);
 
-  const events = mockEvents.filter(e => e.venueId === (typeof id === 'string' ? id : id?.[0]));
   const isFavorite = user?.favorites.includes(typeof id === 'string' ? id : (id?.[0] ?? ''));
 
   if (isLoading) {
@@ -95,16 +110,6 @@ export default function VenueDetailScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     toggleFavorite(venue.id);
-  };
-
-  const handleBuyTicket = (eventId: string) => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    router.push({
-      pathname: '/checkout' as any,
-      params: { eventId },
-    });
   };
 
   const getCrowdColor = () => {
@@ -237,47 +242,38 @@ export default function VenueDetailScreen() {
           {/* Events */}
           <View style={styles.eventsSection}>
             <Text style={styles.sectionTitle}>Upcoming Events</Text>
-            {events.map((event) => (
-              <View key={event.id} style={styles.eventCard}>
-                <Image source={{ uri: (event.images?.[0] && event.images[0].trim() !== '') ? event.images[0] : 'https://images.unsplash.com/photo-1566417713940-fe7c737a9ef2?w=800' }} style={styles.eventImage} />
-                <View style={styles.eventInfo}>
-                  <Text style={styles.eventTitle}>{event.title}</Text>
-                  <Text style={styles.eventDate}>
-                    {new Date(event.startAt).toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </Text>
-                  {event.friendsGoing && event.friendsGoing > 0 && (
-                    <Text style={styles.friendsGoing}>
-                      {event.friendsGoing} friends going
-                    </Text>
+            {events.length === 0 ? (
+              <View style={styles.noEventsContainer}>
+                <Calendar size={32} color={theme.colors.text.tertiary} />
+                <Text style={styles.noEventsText}>No upcoming events</Text>
+              </View>
+            ) : (
+              events.map((event) => (
+                <View key={event.id} style={styles.eventCard}>
+                  {event.image ? (
+                    <Image source={{ uri: event.image }} style={styles.eventImage} />
+                  ) : (
+                    <View style={[styles.eventImage, styles.eventImagePlaceholder]}>
+                      <Calendar size={28} color={theme.colors.text.tertiary} />
+                    </View>
                   )}
-                  
-                  {/* Products */}
-                  <View style={styles.products}>
-                    {event.products.map((product) => (
-                      <TouchableOpacity
-                        key={product.id}
-                        style={styles.productItem}
-                        onPress={() => handleBuyTicket(event.id)}
-                      >
-                        <View style={styles.productInfo}>
-                          <Text style={styles.productName}>{product.name}</Text>
-                          <Text style={styles.productPrice}>${product.price}</Text>
-                        </View>
-                        {product.qtySold >= product.qtyTotal * 0.8 && (
-                          <View style={styles.limitedBadge}>
-                            <Text style={styles.limitedText}>Limited</Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    ))}
+                  <View style={styles.eventInfo}>
+                    <Text style={styles.eventTitle}>{event.name}</Text>
+                    <Text style={styles.eventDate}>
+                      {new Date(event.date).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                      {event.time ? `  •  ${event.time.slice(0, 5)}` : ''}
+                    </Text>
+                    {event.description ? (
+                      <Text style={styles.eventDescription} numberOfLines={2}>{event.description}</Text>
+                    ) : null}
                   </View>
                 </View>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         </View>
       </ScrollView>
@@ -435,6 +431,15 @@ const styles = StyleSheet.create({
     color: theme.colors.text.primary,
     marginBottom: theme.spacing.md,
   },
+  noEventsContainer: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xl,
+    gap: theme.spacing.sm,
+  },
+  noEventsText: {
+    fontSize: 14,
+    color: theme.colors.text.tertiary,
+  },
   eventCard: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.borderRadius.lg,
@@ -444,6 +449,11 @@ const styles = StyleSheet.create({
   eventImage: {
     width: '100%',
     height: 150,
+  },
+  eventImagePlaceholder: {
+    backgroundColor: theme.colors.surface ?? theme.colors.card,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   eventInfo: {
     padding: theme.spacing.md,
@@ -459,47 +469,11 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
     marginBottom: 4,
   },
-  friendsGoing: {
-    fontSize: 12,
-    color: theme.colors.cyan,
-    marginBottom: theme.spacing.md,
-  },
-  products: {
-    gap: theme.spacing.sm,
-  },
-  productItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: theme.colors.background,
-    padding: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
-    marginBottom: theme.spacing.sm,
-  },
-  productInfo: {
-    flex: 1,
-  },
-  productName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: theme.colors.text.primary,
-    marginBottom: 2,
-  },
-  productPrice: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: theme.colors.purple,
-  },
-  limitedBadge: {
-    backgroundColor: theme.colors.error,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: theme.borderRadius.sm,
-  },
-  limitedText: {
-    color: theme.colors.white,
-    fontSize: 10,
-    fontWeight: '700',
+  eventDescription: {
+    fontSize: 13,
+    color: theme.colors.text.tertiary,
+    marginTop: 4,
+    lineHeight: 18,
   },
   errorText: {
     color: theme.colors.text.primary,
