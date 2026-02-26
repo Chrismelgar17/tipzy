@@ -74,7 +74,7 @@ export const CompactVenueCard: React.FC<CompactVenueCardProps> = ({ venue, onPre
         <View style={styles.detailsRow}>
           <View style={styles.infoItem}>
             <MapPin size={14} color={theme.colors.text.tertiary} />
-            <Text style={styles.detailText}>{venue.distance != null ? Math.round(venue.distance) : '—'} mi</Text>
+            <Text style={styles.detailText}>{venue.distance != null ? venue.distance.toFixed(1) : '—'} mi</Text>
           </View>
           <View style={styles.infoItem}>
             <Clock size={14} color={theme.colors.text.tertiary} />

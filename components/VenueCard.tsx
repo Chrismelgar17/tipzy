@@ -87,7 +87,7 @@ export const VenueCard: React.FC<VenueCardProps> = ({ venue, onPress, onBuyPress
             <View style={styles.infoRow}>
               <View style={styles.infoItem}>
                 <MapPin size={14} color={theme.colors.text.secondary} />
-                <Text style={styles.infoText}>{venue.distance != null ? Math.round(venue.distance) : '—'} mi</Text>
+                <Text style={styles.infoText}>{venue.distance != null ? venue.distance.toFixed(1) : '—'} mi</Text>
               </View>
               <View style={styles.infoItem}>
                 <Clock size={14} color={theme.colors.text.secondary} />
