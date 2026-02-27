@@ -1,7 +1,7 @@
 ﻿import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User, UserType, OnboardingState } from '@/types/models';
 import { safeJsonParse, clearCorruptedData, clearAllAppData, secureStorage } from '@/utils/storage';
 import { authService, type AuthUser, type UserRole, type SocialAuthProvider } from '@/lib/auth.service';
@@ -95,6 +95,11 @@ function toAppUser(apiUser: AuthUser, extra?: Partial<User>): User {
 
 export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   const [user, setUser] = useState<User | null>(null);
+  // Keep a ref so callbacks like updateProfile & toggleFavorite never
+  // need [user] as a dependency — preventing cascading re-renders on every
+  // favorites toggle.
+  const userRef = useRef<User | null>(null);
+  useEffect(() => { userRef.current = user; }, [user]);
   const [role, setRole] = useState<UserRole | null>(null);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
   const [verificationToken, setVerificationToken] = useState<string | null>(null);
@@ -399,8 +404,9 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   }, []);
 
   const updateProfile = useCallback(async (updates: Partial<User>) => {
-    if (!user) return;
-    const updated = { ...user, ...updates };
+    const currentUser = userRef.current;
+    if (!currentUser) return;
+    const updated = { ...currentUser, ...updates };
     setUser(updated);
     await AsyncStorage.setItem('user', JSON.stringify(updated));
     // Sync to backend if it's a real user field
@@ -416,19 +422,20 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     } catch (e) {
       console.warn('[Auth] updateProfile sync failed:', e);
     }
-  }, [user]);
+  }, []); // stable — reads user via ref, never recreated
 
   const toggleFavorite = useCallback((venueId: string) => {
-    if (!user) {
+    const currentUser = userRef.current;
+    if (!currentUser) {
       setSignInPrompt('Sign in to save favorites');
       setShowSignInModal(true);
       return;
     }
-    const favorites = user.favorites.includes(venueId)
-      ? user.favorites.filter(id => id !== venueId)
-      : [...user.favorites, venueId];
+    const favorites = currentUser.favorites.includes(venueId)
+      ? currentUser.favorites.filter(id => id !== venueId)
+      : [...currentUser.favorites, venueId];
     updateProfile({ favorites });
-  }, [user, updateProfile]);
+  }, [updateProfile]);
 
   const forgotPassword = useCallback(async (email: string) => {
     // Backend endpoint not yet implemented  placeholder

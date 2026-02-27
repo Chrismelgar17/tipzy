@@ -1,21 +1,30 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   Image,
   Alert,
   TextInput,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { Heart, MapPin, Star, Trash2, Search, Filter, SortAsc } from 'lucide-react-native';
+import { Heart, MapPin, Star, Trash2, Search, SortAsc } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
 import { useVenues } from '@/hooks/venues-context';
 import { Venue } from '@/types/models';
 import { router } from 'expo-router';
+
+// Stable per-venue rating cache — computed once per session, never changes on re-render.
+const ratingCache = new Map<string, string>();
+function getStableRating(venueId: string): string {
+  if (!ratingCache.has(venueId)) {
+    ratingCache.set(venueId, (4.0 + Math.random() * 1.0).toFixed(1));
+  }
+  return ratingCache.get(venueId)!;
+}
 
 export default function FavoritesScreen() {
   const { user, updateProfile } = useAuth();
@@ -23,39 +32,32 @@ export default function FavoritesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'rating' | 'distance'>('name');
 
-  // Always read favorites directly from user so it stays in sync
-  const favorites = user?.favorites || [];
+  // Stable reference — only a new array when the actual favorites list changes.
+  const favorites = useMemo(() => user?.favorites ?? [], [user?.favorites]);
 
   const favoriteVenues = useMemo(() => {
     let filtered = venues.filter((venue: Venue) => favorites.includes(venue.id));
-    
-    // Apply search filter
+
     if (searchQuery.trim()) {
-      filtered = filtered.filter(venue => 
-        venue.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        venue.genres.some(genre => genre.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        venue.address.toLowerCase().includes(searchQuery.toLowerCase())
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(venue =>
+        venue.name.toLowerCase().includes(q) ||
+        venue.genres.some(genre => genre.toLowerCase().includes(q)) ||
+        venue.address.toLowerCase().includes(q)
       );
     }
-    
-    // Apply sorting
-    filtered.sort((a, b) => {
+
+    return [...filtered].sort((a, b) => {
       switch (sortBy) {
-        case 'name':
-          return a.name.localeCompare(b.name);
-        case 'rating':
-          return (b.rating || 0) - (a.rating || 0);
-        case 'distance':
-          return (a.distance || 0) - (b.distance || 0);
-        default:
-          return 0;
+        case 'name':     return a.name.localeCompare(b.name);
+        case 'rating':   return (b.rating || 0) - (a.rating || 0);
+        case 'distance': return (a.distance || 0) - (b.distance || 0);
+        default:         return 0;
       }
     });
-    
-    return filtered;
   }, [favorites, venues, searchQuery, sortBy]);
 
-  const removeFavorite = (venueId: string) => {
+  const removeFavorite = useCallback((venueId: string) => {
     Alert.alert(
       'Remove Favorite',
       'Are you sure you want to remove this venue from your favorites?',
@@ -65,31 +67,33 @@ export default function FavoritesScreen() {
           text: 'Remove',
           style: 'destructive',
           onPress: () => {
-            const updatedFavorites = favorites.filter(id => id !== venueId);
             if (user) {
-              updateProfile({ favorites: updatedFavorites });
+              updateProfile({ favorites: user.favorites.filter(id => id !== venueId) });
             }
           },
         },
       ]
     );
-  };
+  }, [user, updateProfile]);
 
-  const handleVenuePress = (venueId: string) => {
+  const handleVenuePress = useCallback((venueId: string) => {
     router.push(`/venue/${venueId}` as any);
-  };
+  }, []);
 
-  const renderFavoriteItem = (venue: Venue) => {
-    const rating = (4.0 + Math.random() * 1.0).toFixed(1);
-    const priceSymbols = '$'.repeat(venue.priceLevel);
+  const renderItem = useCallback(({ item: venue }: { item: Venue }) => {
+    const rating = getStableRating(venue.id);
+    const priceSymbols = '$'.repeat(venue.priceLevel || 1);
 
     return (
       <TouchableOpacity
-        key={venue.id}
         style={styles.favoriteItem}
         onPress={() => handleVenuePress(venue.id)}
+        activeOpacity={0.8}
       >
-        <Image source={{ uri: venue.photos?.[0] || 'https://images.unsplash.com/photo-1566417713940-fe7c737a9ef2?w=800' }} style={styles.venueImage} />
+        <Image
+          source={{ uri: venue.photos?.[0] || 'https://images.unsplash.com/photo-1566417713940-fe7c737a9ef2?w=800' }}
+          style={styles.venueImage}
+        />
         <View style={styles.venueInfo}>
           <View style={styles.venueHeader}>
             <Text style={styles.venueName} numberOfLines={1}>
@@ -98,6 +102,7 @@ export default function FavoritesScreen() {
             <TouchableOpacity
               style={styles.removeButton}
               onPress={() => removeFavorite(venue.id)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Trash2 size={18} color={theme.colors.error} />
             </TouchableOpacity>
@@ -119,7 +124,7 @@ export default function FavoritesScreen() {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [handleVenuePress, removeFavorite]);
 
   return (
     <>
@@ -143,7 +148,7 @@ export default function FavoritesScreen() {
               onChangeText={setSearchQuery}
             />
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.sortButton}
             onPress={() => {
               const nextSort = sortBy === 'name' ? 'rating' : sortBy === 'rating' ? 'distance' : 'name';
@@ -153,25 +158,33 @@ export default function FavoritesScreen() {
             <SortAsc size={20} color={theme.colors.purple} />
           </TouchableOpacity>
         </View>
-        
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {favoriteVenues.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Heart size={64} color={theme.colors.text.tertiary} />
-            <Text style={styles.emptyTitle}>You have no favorites yet</Text>
-            <Text style={styles.emptyDescription}>
-              Start exploring venues and tap the heart icon to save your favorites here.
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.favoritesList}>
-            <Text style={styles.sectionTitle}>
-              {favoriteVenues.length} Favorite{favoriteVenues.length !== 1 ? 's' : ''}
-            </Text>
-            {favoriteVenues.map(renderFavoriteItem)}
-          </View>
-        )}
-        </ScrollView>
+
+        <FlatList
+          data={favoriteVenues}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          removeClippedSubviews
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          ListHeaderComponent={
+            favoriteVenues.length > 0 ? (
+              <Text style={styles.sectionTitle}>
+                {favoriteVenues.length} Favorite{favoriteVenues.length !== 1 ? 's' : ''}
+              </Text>
+            ) : null
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Heart size={64} color={theme.colors.text.tertiary} />
+              <Text style={styles.emptyTitle}>You have no favorites yet</Text>
+              <Text style={styles.emptyDescription}>
+                Start exploring venues and tap the heart icon to save your favorites here.
+              </Text>
+            </View>
+          }
+        />
       </View>
     </>
   );
@@ -215,8 +228,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  content: {
-    flex: 1,
+  listContent: {
+    padding: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    flexGrow: 1,
   },
   emptyState: {
     flex: 1,
@@ -237,10 +252,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
-  },
-  favoritesList: {
-    padding: theme.spacing.lg,
-    paddingTop: 0,
   },
   sectionTitle: {
     fontSize: 18,
