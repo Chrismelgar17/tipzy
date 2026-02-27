@@ -2,10 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as WebBrowser from 'expo-web-browser';
+import { configureGoogleSignIn } from '@/lib/google-signin';
 
-// Must be called as early as possible so any OAuth deep-link that cold-starts
-// the app (especially on Android) is intercepted before the browser tries to
-// stay open or the OS dispatches a new Activity.
+// Needed for web OAuth flows (Apple web, etc.) — complete any pending auth session.
 WebBrowser.maybeCompleteAuthSession();
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -159,6 +158,9 @@ function RootLayoutNav() {
 function ThemedRootLayout() {
   const { theme } = useTheme();
   useEffect(() => {
+    // Configure native Google Sign-In as early as possible.
+    configureGoogleSignIn();
+
     // Hide the splash immediately on first mount — never block on async work.
     void SplashScreen.hideAsync().catch(() => {});
 

@@ -18,12 +18,8 @@ import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { ResponseType } from 'expo-auth-session';
-
-WebBrowser.maybeCompleteAuthSession();
+import { nativeGoogleSignIn, GoogleSignInCancelledError } from '@/lib/google-signin';
 
 export default function AuthScreen() {
   const { signIn, signInWithProvider } = useAuth();
@@ -36,42 +32,6 @@ export default function AuthScreen() {
     email?: string;
     password?: string;
   }>({});
-  const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  const expoUsername = process.env.EXPO_PUBLIC_EXPO_USERNAME;
-  // The Expo auth proxy URI is registered as an Authorized Redirect URI in
-  // Google Cloud Console for the web client. Using it directly (no native client
-  // IDs) ensures we never generate the EAS-update URI that Google rejects.
-  const googleRedirectUri = expoUsername
-    ? `https://auth.expo.io/@${expoUsername}/nightlife-access-app`
-    : 'https://auth.expo.io/@chrismelgar/nightlife-access-app';
-  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest(
-    googleWebClientId
-      ? {
-          clientId: googleWebClientId,
-          webClientId: googleWebClientId,
-          redirectUri: googleRedirectUri,
-          responseType: ResponseType.Token,
-          scopes: ['openid', 'profile', 'email'],
-        }
-      : null as any,
-  );
-
-  useEffect(() => {
-    if (googleResponse?.type === 'success') {
-      const accessToken = googleResponse.authentication?.accessToken
-        ?? (googleResponse as any).params?.access_token;
-      if (!accessToken) {
-        Alert.alert('Google Sign In Failed', 'No access token received from Google. Please try again.');
-        return;
-      }
-      setIsLoading(true);
-      signInWithProvider('google', { accessToken })
-        .catch((err: any) => Alert.alert('Google Sign In Failed', err?.message || 'Unable to sign in with Google'))
-        .finally(() => setIsLoading(false));
-    } else if (googleResponse?.type === 'error') {
-      Alert.alert('Google Sign In Failed', (googleResponse as any).error?.message || 'Authentication failed');
-    }
-  }, [googleResponse]);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -177,20 +137,15 @@ export default function AuthScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    if (!googleWebClientId) {
-      Alert.alert('Google Sign In Not Configured', 'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to .env and restart Expo.');
-      return;
-    }
-    if (!googleRequest) return;
+    setIsLoading(true);
     try {
-      // promptAsync() with no custom URL: expo-auth-session opens the Google
-      // auth URL via openAuthSessionAsync (Chrome Custom Tabs on Android).
-      // The redirect_uri sent to Google is the registered Expo proxy HTTPS URL.
-      // Chrome Custom Tabs intercepts the final tipzy:// redirect in-process
-      // via onActivityResult — no Activity restart.
-      await googlePromptAsync();
+      const { accessToken } = await nativeGoogleSignIn();
+      await signInWithProvider('google', { accessToken });
     } catch (err: any) {
-      Alert.alert('Google Sign In Failed', err?.message || 'Could not start Google sign in');
+      if (err instanceof GoogleSignInCancelledError) return;
+      Alert.alert('Google Sign In Failed', err?.message || 'Unable to sign in with Google');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -490,11 +445,6 @@ export default function AuthScreen() {
               <Text style={styles.signUpLink}>Sign Up</Text>
             </TouchableOpacity>
           </View>
-
-          {!googleWebClientId && (
-            <Text style={styles.demoText}>Google Sign In requires a Web Client ID — tap the button for setup steps.</Text>
-          )}
-        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -60,6 +60,7 @@
       "output": "single"
     },
     "plugins": [
+      "@react-native-google-signin/google-signin",
       [
         "expo-router",
         {

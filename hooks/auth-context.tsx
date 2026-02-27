@@ -6,6 +6,7 @@ import { User, UserType, OnboardingState } from '@/types/models';
 import { safeJsonParse, clearCorruptedData, clearAllAppData, secureStorage } from '@/utils/storage';
 import { authService, type AuthUser, type UserRole, type SocialAuthProvider } from '@/lib/auth.service';
 import { setSessionExpiredHandler } from '@/lib/api';
+import { nativeGoogleSignOut } from '@/lib/google-signin';
 
 interface AuthState {
   user: User | null;
@@ -388,6 +389,8 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   }, []);
 
   const signOut = useCallback(async () => {
+    // Sign out from native Google SDK (no-op if user signed in via email)
+    await nativeGoogleSignOut();
     await authService.logout();
     setUser(null);
     setRole(null);

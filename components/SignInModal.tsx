@@ -17,12 +17,8 @@ import { Mail, Lock, X, Sparkles, Phone, Calendar, CheckSquare, Square, Chrome, 
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
 import * as Haptics from 'expo-haptics';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { ResponseType } from 'expo-auth-session';
-
-WebBrowser.maybeCompleteAuthSession();
+import { nativeGoogleSignIn, GoogleSignInCancelledError } from '@/lib/google-signin';
 
 interface SignInModalProps {
   visible: boolean;
@@ -42,54 +38,19 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [ageConfirmed, setAgeConfirmed] = useState(false);
 
-  const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  const expoUsername = process.env.EXPO_PUBLIC_EXPO_USERNAME;
-  // The Expo auth proxy URI is registered as an Authorized Redirect URI in
-  // Google Cloud Console for the web client.
-  const googleRedirectUri = expoUsername
-    ? `https://auth.expo.io/@${expoUsername}/nightlife-access-app`
-    : 'https://auth.expo.io/@chrismelgar/nightlife-access-app';
-  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest(
-    googleWebClientId
-      ? {
-          clientId: googleWebClientId,
-          webClientId: googleWebClientId,
-          redirectUri: googleRedirectUri,
-          responseType: ResponseType.Token,
-          scopes: ['openid', 'profile', 'email'],
-        }
-      : null as any,
-  );
-
-  useEffect(() => {
-    if (googleResponse?.type === 'success') {
-      const accessToken = googleResponse.authentication?.accessToken
-        ?? (googleResponse as any).params?.access_token;
-      if (!accessToken) {
-        Alert.alert('Google Sign In Failed', 'No access token received. Please try again.');
-        return;
-      }
-      setIsLoading(true);
-      signInWithProvider('google', { accessToken })
-        .then(() => { onClose(); resetForm(); })
-        .catch((err: any) => Alert.alert('Google Sign In Failed', err?.message || 'Unable to sign in with Google'))
-        .finally(() => setIsLoading(false));
-    } else if (googleResponse?.type === 'error') {
-      Alert.alert('Google Sign In Failed', (googleResponse as any).error?.message || 'Authentication failed');
-    }
-  }, [googleResponse]);
-
   const handleGoogleSignIn = async () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (!googleWebClientId) {
-      Alert.alert('Google Sign In Not Configured', 'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to .env and restart Expo.');
-      return;
-    }
-    if (!googleRequest) return;
+    setIsLoading(true);
     try {
-      await googlePromptAsync();
+      const { accessToken } = await nativeGoogleSignIn();
+      await signInWithProvider('google', { accessToken });
+      onClose();
+      resetForm();
     } catch (err: any) {
-      Alert.alert('Google Sign In Failed', err?.message || 'Could not start Google sign in');
+      if (err instanceof GoogleSignInCancelledError) return;
+      Alert.alert('Google Sign In Failed', err?.message || 'Unable to sign in with Google');
+    } finally {
+      setIsLoading(false);
     }
   };
 
