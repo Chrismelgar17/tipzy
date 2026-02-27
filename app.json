@@ -34,6 +34,11 @@
       },
       "package": "com.chrismelgar.nightlifeaccessapp",
       "usesCleartextTraffic": true,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBQJqxQO3mionv0MzjRQJjaupydexFozqI"
+        }
+      },
       "permissions": [
         "android.permission.VIBRATE",
         "android.permission.CAMERA",
