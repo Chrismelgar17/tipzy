@@ -152,6 +152,40 @@ export default function ProfileScreen() {
       fontSize: 14,
       color: theme.colors.text.tertiary,
     },
+    switchViewButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginHorizontal: theme.spacing.lg,
+      marginTop: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      backgroundColor: theme.colors.purple,
+      borderRadius: theme.borderRadius.md,
+    },
+    switchViewLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+    },
+    switchViewIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    switchViewTitle: {
+      color: theme.colors.white,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    switchViewSub: {
+      color: 'rgba(255,255,255,0.75)',
+      fontSize: 12,
+      marginTop: 2,
+    },
     signOutButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -256,28 +290,22 @@ export default function ProfileScreen() {
   }
 
   const menuItems = [
-    {
+    ...(!isBusiness ? [{
       icon: Building2,
-      label: isBusiness
-        ? 'My Business Dashboard'
-        : businessStatus === 'pending'
-          ? 'Business Approval Pending'
-          : 'Register Your Venue',
-      value: isBusiness
-        ? 'Manage your venue'
-        : businessStatus === 'pending'
-          ? 'Awaiting admin review'
-          : 'Business owners',
+      label: businessStatus === 'pending'
+        ? 'Business Approval Pending'
+        : 'Register Your Venue',
+      value: businessStatus === 'pending'
+        ? 'Awaiting admin review'
+        : 'Business owners',
       onPress: () => {
-        if (isBusiness) {
-          router.replace('/(business-tabs)/dashboard' as any);
-        } else if (businessStatus === 'pending') {
+        if (businessStatus === 'pending') {
           // Already submitted — inform the user
         } else {
           router.push('/onboarding/business-form' as any);
         }
       },
-    },
+    }] : []),
     {
       icon: Heart,
       label: 'Favorites',
@@ -407,6 +435,26 @@ export default function ProfileScreen() {
             </Text>
           </View>
         </View>
+      )}
+
+      {/* Switch to Business Dashboard — shown when user has an approved business */}
+      {isBusiness && (
+        <TouchableOpacity
+          style={styles.switchViewButton}
+          onPress={() => router.replace('/(business-tabs)/dashboard' as any)}
+          activeOpacity={0.85}
+        >
+          <View style={styles.switchViewLeft}>
+            <View style={styles.switchViewIconWrap}>
+              <Building2 size={22} color={theme.colors.white} />
+            </View>
+            <View>
+              <Text style={styles.switchViewTitle}>Switch to Business View</Text>
+              <Text style={styles.switchViewSub}>Manage your venue & dashboard</Text>
+            </View>
+          </View>
+          <ChevronRight size={20} color={theme.colors.white} />
+        </TouchableOpacity>
       )}
 
       {(user?.role === 'clubAdmin' || user?.role === 'superAdmin') && (

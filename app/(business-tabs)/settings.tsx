@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Settings as SettingsIcon,
   Building,
+  Users,
 } from 'lucide-react-native';
 
 interface SettingItem {
@@ -291,6 +292,39 @@ export default function BusinessSettingsScreen() {
       color: theme.colors.text.secondary,
       lineHeight: 20,
     },
+    switchViewButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      backgroundColor: theme.colors.purple,
+      borderRadius: theme.borderRadius.md,
+      marginBottom: theme.spacing.xl,
+    },
+    switchViewLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+    },
+    switchViewIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    switchViewTitle: {
+      color: '#ffffff',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    switchViewSub: {
+      color: 'rgba(255,255,255,0.75)',
+      fontSize: 12,
+      marginTop: 2,
+    },
     logoutSection: {
       marginTop: theme.spacing.xl,
     },
@@ -335,6 +369,24 @@ export default function BusinessSettingsScreen() {
               Manage your business account preferences and settings
             </Text>
           </View>
+
+          {/* Switch to Customer View */}
+          <TouchableOpacity
+            style={styles.switchViewButton}
+            onPress={() => router.replace('/(tabs)/home' as any)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.switchViewLeft}>
+              <View style={styles.switchViewIconWrap}>
+                <Users size={22} color={theme.colors.white} />
+              </View>
+              <View>
+                <Text style={styles.switchViewTitle}>Switch to Customer View</Text>
+                <Text style={styles.switchViewSub}>Browse venues & manage your tickets</Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color={theme.colors.white} />
+          </TouchableOpacity>
 
           {settingsSections.map((section) => (
             <View key={section.title} style={styles.section}>
