@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useRef, useState, Component } from 'react';
-import { View, Text, StyleSheet, Platform, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Platform, Animated, Easing, Image } from 'react-native';
 
 // Error boundary so a native map crash doesn't take down the whole app
 class MapErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -21,7 +21,6 @@ class MapErrorBoundary extends Component<{ children: React.ReactNode }, { hasErr
     return this.props.children;
   }
 }
-import { Svg, Path, Line, Circle as SvgCircle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { theme } from '@/constants/theme';
 import { Venue } from '@/types/models';
 
@@ -128,50 +127,20 @@ function UserLocationMarker() {
 
   return (
     <View style={styles.userLocationWrapper}>
-      {/* Pulsing ring — white */}
+      {/* Pulsing neon ring */}
       <Animated.View
         style={[
           styles.userLocationRing,
           { transform: [{ scale: ringScale }], opacity: ringOpacity },
         ]}
       />
-      {/* Circular dark badge */}
+      {/* App logo clipped to circle */}
       <View style={styles.userLocationDot}>
-        {/* Tipzy martini glass — white with gradient shimmer */}
-        <Svg width={28} height={32} viewBox="0 0 64 72">
-          <Defs>
-            {/* Subtle top-to-bottom shimmer inside the glass bowl */}
-            <LinearGradient id="bowlGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.18" />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0.04" />
-            </LinearGradient>
-            {/* Garnish fill */}
-            <LinearGradient id="garnishGrad" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.22" />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0.06" />
-            </LinearGradient>
-          </Defs>
-          {/* Glass bowl filled with gradient shimmer */}
-          <Path
-            d="M 4,16 L 60,16 L 32,50 Z"
-            fill="url(#bowlGrad)"
-            stroke="#FFFFFF"
-            strokeWidth="3.5"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-          {/* Stem */}
-          <Line x1="32" y1="50" x2="32" y2="62" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" />
-          {/* Base */}
-          <Line x1="19" y1="62" x2="45" y2="62" stroke="#FFFFFF" strokeWidth="3.5" strokeLinecap="round" />
-          {/* Straw (diagonal, upper-left) */}
-          <Line x1="23" y1="16" x2="11" y2="4" stroke="rgba(255,255,255,0.75)" strokeWidth="3" strokeLinecap="round" />
-          {/* Citrus garnish — circle on right rim */}
-          <SvgCircle cx="57" cy="10" r="9" fill="url(#garnishGrad)" stroke="#FFFFFF" strokeWidth="2.5" />
-          {/* Citrus segments */}
-          <Line x1="48" y1="10" x2="66" y2="10" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" strokeLinecap="round" />
-          <Line x1="57" y1="1" x2="57" y2="19" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" strokeLinecap="round" />
-        </Svg>
+        <Image
+          source={require('../assets/images/icon.png')}
+          style={styles.userLocationIcon}
+          resizeMode="cover"
+        />
       </View>
     </View>
   );
@@ -332,54 +301,57 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   customMarker: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.9)',
-    elevation: 6,
+    elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
-    shadowRadius: 4,
+    shadowRadius: 3,
   },
   markerCount: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '700',
     textAlign: 'center',
   },
   userLocationWrapper: {
-    width: 64,
-    height: 64,
+    width: 60,
+    height: 60,
     justifyContent: 'center',
     alignItems: 'center',
   },
   userLocationRing: {
     position: 'absolute',
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(168, 85, 247, 0.15)',
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.45)',
+    borderColor: 'rgba(168, 85, 247, 0.5)',
   },
   userLocationDot: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(10, 6, 20, 0.88)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.7)',
-    shadowColor: '#FFFFFF',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(168, 85, 247, 0.85)',
+    shadowColor: '#a855f7',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
     elevation: 8,
+  },
+  userLocationIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   legend: {
     position: 'absolute',
