@@ -267,9 +267,6 @@ function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocatio
       <MapView
         style={styles.map}
         initialRegion={initialRegion}
-        customMapStyle={mapStyle}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        userInterfaceStyle="dark"
         showsUserLocation={false}
       >
         {/* Custom user location marker */}
