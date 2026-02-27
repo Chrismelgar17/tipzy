@@ -445,6 +445,7 @@ export default function AuthScreen() {
               <Text style={styles.signUpLink}>Sign Up</Text>
             </TouchableOpacity>
           </View>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
