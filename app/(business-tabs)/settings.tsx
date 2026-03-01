@@ -23,6 +23,7 @@ import {
   Settings as SettingsIcon,
   Building,
   Users,
+  CreditCard,
 } from 'lucide-react-native';
 
 interface SettingItem {
@@ -72,6 +73,10 @@ export default function BusinessSettingsScreen() {
     router.push('/business-profile');
   };
 
+  const handleSubscription = () => {
+    router.push('/(business-tabs)/subscription' as any);
+  };
+
   const settingsSections = [
     {
       title: 'Profile & Account',
@@ -84,6 +89,15 @@ export default function BusinessSettingsScreen() {
           type: 'link' as const,
           onPress: handleBusinessProfile,
           testId: 'business-profile-button',
+        },
+        {
+          id: 'subscription',
+          title: 'Plan & Subscription',
+          description: 'Manage your Tipzy plan, trial, and billing',
+          icon: <CreditCard size={24} color={theme.colors.success} />,
+          type: 'link' as const,
+          onPress: handleSubscription,
+          testId: 'subscription-button',
         },
       ],
     },
