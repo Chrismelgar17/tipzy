@@ -85,9 +85,9 @@ const BUSINESS_PLANS = [
 // ─── Features per plan ────────────────────────────────────────────────────────
 const FEATURES = [
   { icon: BellRing,   label: 'Push notifications to party seekers',  desc: 'Blast new events to thousands of nearby users — instant.' },
-  { icon: TrendingUp, label: 'Real-time crowd analytics',            desc: 'See who's coming, who's leaving, and when your floor peaks.' },
+  { icon: TrendingUp, label: 'Real-time crowd analytics',            desc: "See who's coming, who's leaving, and when your floor peaks." },
   { icon: Users,      label: 'Audience reach dashboard',             desc: 'Know exactly how many eyes hit your venue profile tonight.' },
-  { icon: QrCode,     label: 'QR scanner for fast check-ins',        desc: 'Long lines kill the vibe. Yours won't have any.' },
+  { icon: QrCode,     label: 'QR scanner for fast check-ins',        desc: "Long lines kill the vibe. Yours won't have any." },
   { icon: BarChart3,  label: 'Weekly performance reports',           desc: 'Revenue, views, check-ins — every Monday in your inbox.' },
   { icon: Camera,     label: 'Photo gallery & venue profile',        desc: 'Make people want to show up before they even arrive.' },
   { icon: Megaphone,  label: 'Quarterly promo boosts',               desc: 'We push your venue to the top of the Tipzy map. 4×/year.' },
