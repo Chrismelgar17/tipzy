@@ -28,7 +28,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
-  Zap,
   Calendar,
   CreditCard,
   CheckCircle2,
@@ -37,14 +36,6 @@ import {
   RefreshCw,
   ChevronRight,
   Clock,
-  TrendingUp,
-  BarChart3,
-  BellRing,
-  QrCode,
-  Users,
-  Megaphone,
-  Camera,
-  Star,
   Sparkles,
 } from 'lucide-react-native';
 import { useTheme } from '@/hooks/theme-context';
@@ -83,16 +74,26 @@ const BUSINESS_PLANS = [
 ];
 
 // ─── Features per plan ────────────────────────────────────────────────────────
-const FEATURES = [
-  { icon: BellRing,   label: 'Push notifications to party seekers',  desc: 'Blast new events to thousands of nearby users — instant.' },
-  { icon: TrendingUp, label: 'Real-time crowd analytics',            desc: "See who's coming, who's leaving, and when your floor peaks." },
-  { icon: Users,      label: 'Audience reach dashboard',             desc: 'Know exactly how many eyes hit your venue profile tonight.' },
-  { icon: QrCode,     label: 'QR scanner for fast check-ins',        desc: "Long lines kill the vibe. Yours won't have any." },
-  { icon: BarChart3,  label: 'Weekly performance reports',           desc: 'Revenue, views, check-ins — every Monday in your inbox.' },
-  { icon: Camera,     label: 'Photo gallery & venue profile',        desc: 'Make people want to show up before they even arrive.' },
-  { icon: Megaphone,  label: 'Quarterly promo boosts',               desc: 'We push your venue to the top of the Tipzy map. 4×/year.' },
-  { icon: Star,       label: 'Priority discovery listing',           desc: 'Rank above non-subscribed venues in every search.' },
-];
+const FEATURES_BY_PLAN = {
+  monthly: [
+    { icon: '🔔', label: 'Event push alerts',        desc: 'Blast your night to thousands nearby' },
+    { icon: '📊', label: 'Live crowd analytics',     desc: 'See your floor fill up in real time' },
+    { icon: '📷', label: 'Venue photo gallery',      desc: 'Make them want to come before they arrive' },
+    { icon: '📱', label: 'QR check-in scanner',      desc: 'Zero lines, max vibes' },
+    { icon: '🗺️', label: 'Discovery map listing',    desc: 'Get found by every party-seeker nearby' },
+    { icon: '📈', label: 'Weekly report',            desc: 'Revenue & views every Monday' },
+  ],
+  yearly: [
+    { icon: '🔔', label: 'Event push alerts',        desc: 'Blast your night to thousands nearby' },
+    { icon: '📊', label: 'Live crowd analytics',     desc: 'See your floor fill up in real time' },
+    { icon: '📷', label: 'Venue photo gallery',      desc: 'Make them want to come before they arrive' },
+    { icon: '📱', label: 'QR check-in scanner',      desc: 'Zero lines, max vibes' },
+    { icon: '🗺️', label: 'Discovery map listing',    desc: 'Get found by every party-seeker nearby' },
+    { icon: '📈', label: 'Weekly report',            desc: 'Revenue & views every Monday' },
+    { icon: '🚀', label: 'Promo boost ×4/year',      desc: 'We push you to #1 on the Tipzy map' },
+    { icon: '⭐', label: 'Priority listing badge',   desc: 'Rank above every free venue, always' },
+  ],
+};
 
 // ─── Status badge config ──────────────────────────────────────────────────────
 const STATUS_META: Record<string, { label: string; color: string; icon: any }> = {
@@ -148,10 +149,11 @@ export default function BusinessSubscriptionScreen() {
     refresh,
   } = useSubscription();
 
-  const [auditLog, setAuditLog]     = useState<AuditEntry[]>([]);
+  const [auditLog, setAuditLog]       = useState<AuditEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshing, setRefreshing]   = useState(false);
   const [startingPlan, setStartingPlan] = useState<string | null>(null);
+  const [featuresTab, setFeaturesTab] = useState<'monthly' | 'yearly'>('monthly');
 
   // ── Load payment history ────────────────────────────────────────────────────
   const loadAuditLog = useCallback(async () => {
@@ -368,21 +370,42 @@ export default function BusinessSubscriptionScreen() {
         </View>
       )}
 
-      {/* ── Features list (visible when has access OR when choosing a plan) ── */}
+      {/* ── Features tabs ── */}
       <View style={s.featuresSection}>
         <Text style={s.sectionTitle}>
-          {hasAccess ? '🎁 What you have unlocked' : '🔓 What you unlock'}
+          {hasAccess ? "🎁 What you've unlocked" : '🔓 What you unlock'}
         </Text>
-        {FEATURES.map((f, i) => (
-          <View key={i} style={s.featureRow}>
-            <View style={[s.featureIcon, hasAccess ? s.featureIconActive : s.featureIconInactive]}>
-              <f.icon size={16} color={hasAccess ? '#00D9A3' : theme.colors.text.tertiary} />
-            </View>
+
+        {/* Pill toggle */}
+        <View style={s.ftToggle}>
+          <TouchableOpacity
+            style={[s.ftPill, featuresTab === 'monthly' && s.ftPillActive]}
+            onPress={() => setFeaturesTab('monthly')}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.ftPillLabel, featuresTab === 'monthly' && s.ftPillLabelActive]}>Monthly</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.ftPill, featuresTab === 'yearly' && s.ftPillActive]}
+            onPress={() => setFeaturesTab('yearly')}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.ftPillLabel, featuresTab === 'yearly' && s.ftPillLabelActive]}>Yearly  ⭐ +2</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Feature cards */}
+        {FEATURES_BY_PLAN[featuresTab].map((f, i) => (
+          <View key={i} style={s.ftCard}>
+            <Text style={s.ftEmoji}>{f.icon}</Text>
             <View style={{ flex: 1 }}>
-              <Text style={[s.featureLabel, !hasAccess && s.featureLabelDim]}>{f.label}</Text>
-              <Text style={s.featureDesc}>{f.desc}</Text>
+              <Text style={s.ftLabel}>{f.label}</Text>
+              <Text style={s.ftDesc}>{f.desc}</Text>
             </View>
-            {hasAccess && <CheckCircle2 size={14} color="#00D9A3" />}
+            {hasAccess
+              ? <CheckCircle2 size={16} color="#00D9A3" />
+              : <View style={s.ftLock}><Text style={s.ftLockIcon}>🔒</Text></View>
+            }
           </View>
         ))}
       </View>
@@ -513,15 +536,30 @@ function makeStyles(theme: any) {
     addCardLink:  { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center', marginTop: 12, paddingVertical: 8 },
     addCardLinkLabel: { color: theme.colors.text.tertiary, fontSize: 13 },
 
-    // Features
+    // Features tabs
     featuresSection: { paddingHorizontal: 16, paddingTop: 28 },
-    featureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 16 },
-    featureIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-    featureIconActive:   { backgroundColor: '#00D9A322' },
-    featureIconInactive: { backgroundColor: 'rgba(255,255,255,0.05)' },
-    featureLabel:    { color: theme.colors.text.primary,    fontSize: 14, fontWeight: '600', marginBottom: 2 },
-    featureLabelDim: { color: theme.colors.text.tertiary },
-    featureDesc:     { color: theme.colors.text.tertiary, fontSize: 12, lineHeight: 16 },
+    ftToggle: {
+      flexDirection: 'row', backgroundColor: theme.colors.card,
+      borderRadius: 12, padding: 4, marginBottom: 16, marginTop: 12,
+    },
+    ftPill: {
+      flex: 1, paddingVertical: 9, borderRadius: 10,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    ftPillActive: { backgroundColor: theme.colors.purple },
+    ftPillLabel: { fontSize: 13, fontWeight: '600', color: theme.colors.text.tertiary },
+    ftPillLabelActive: { color: '#fff' },
+    ftCard: {
+      flexDirection: 'row', alignItems: 'center', gap: 14,
+      backgroundColor: theme.colors.card, borderRadius: 14,
+      paddingVertical: 14, paddingHorizontal: 16, marginBottom: 8,
+      borderWidth: 1, borderColor: theme.colors.border,
+    },
+    ftEmoji:  { fontSize: 22, width: 32, textAlign: 'center' },
+    ftLabel:  { color: theme.colors.text.primary,   fontSize: 14, fontWeight: '700', marginBottom: 2 },
+    ftDesc:   { color: theme.colors.text.tertiary, fontSize: 12, lineHeight: 17 },
+    ftLock:   { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
+    ftLockIcon: { fontSize: 13 },
 
     // Payment history
     historySection: { paddingHorizontal: 16, paddingTop: 28 },
