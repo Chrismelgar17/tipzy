@@ -1,5 +1,5 @@
 import { Tabs, Redirect } from "expo-router";
-import { Home, Gift, Plus, ShoppingCart, Settings } from "lucide-react-native";
+import { Home, Gift, Plus, ShoppingCart, Settings, CreditCard } from "lucide-react-native";
 import React from "react";
 import { theme } from "@/constants/theme";
 import { useAuth } from "@/hooks/auth-context";
@@ -91,6 +91,14 @@ export default function BusinessTabLayout() {
           title: "Orders",
           tabBarIcon: ({ color, size }) => <ShoppingCart size={size} color={color} />,
           headerTitle: "Orders",
+        }}
+      />
+      <Tabs.Screen
+        name="subscription"
+        options={{
+          title: "Plan",
+          tabBarIcon: ({ color, size }) => <CreditCard size={size} color={color} />,
+          headerTitle: "Subscription",
         }}
       />
       <Tabs.Screen

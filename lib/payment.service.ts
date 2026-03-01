@@ -92,3 +92,19 @@ export async function reactivateSubscription(): Promise<{ success: boolean }> {
   const res = await api.post('/stripe/reactivate');
   return res.data;
 }
+
+// ─── Payment history ──────────────────────────────────────────────────────────
+
+/** Fetch the payment audit log for the current user (last 100 entries). */
+export async function getPaymentHistory(): Promise<{ entries: Array<{
+  id: string;
+  event_type: string;
+  amount_cents: number | null;
+  currency: string;
+  description: string | null;
+  status: string;
+  created_at: string;
+}> }> {
+  const res = await api.get('/stripe/audit-log');
+  return res.data;
+}
