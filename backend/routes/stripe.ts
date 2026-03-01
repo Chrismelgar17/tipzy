@@ -31,10 +31,22 @@ import { requireAuth } from "../auth";
 import { query } from "../db";
 import type { DbSubscription, DbUserPaymentMethod } from "../db";
 
-// ─── Stripe client ────────────────────────────────────────────────────────────
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", {
-  apiVersion: "2025-01-27.acacia" as any,
-});
+// ─── Lazy Stripe client ───────────────────────────────────────────────────────
+// Instantiated on first use so the server starts even when STRIPE_SECRET_KEY
+// is not yet configured in the environment (avoids crash-on-boot on Railway).
+let _stripe: Stripe | null = null;
+function getStripe(): Stripe {
+  if (!_stripe) {
+    const key = process.env.STRIPE_SECRET_KEY ?? "";
+    if (!key) {
+      throw new Error(
+        "STRIPE_SECRET_KEY is not set. Add it to your Railway environment variables.",
+      );
+    }
+    _stripe = new Stripe(key, { apiVersion: "2025-01-27.acacia" as any });
+  }
+  return _stripe;
+}
 
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
@@ -75,7 +87,7 @@ async function ensureStripeCustomer(userId: string): Promise<string> {
   if (!user) throw new Error("User not found");
   if (user.stripe_customer_id) return user.stripe_customer_id;
 
-  const customer = await stripe.customers.create({
+  const customer = await getStripe().customers.create({
     email: user.email,
     name: user.name,
     metadata: { tipzyUserId: userId },
@@ -195,7 +207,7 @@ stripeRouter.post("/setup-intent", requireAuth, async (c) => {
   const userId = (c as any).get("userId") as string;
   try {
     const customerId = await ensureStripeCustomer(userId);
-    const intent = await stripe.setupIntents.create({
+    const intent = await getStripe().setupIntents.create({
       customer: customerId,
       payment_method_types: ["card"],
       usage: "off_session",
@@ -214,13 +226,13 @@ stripeRouter.post("/sync-methods", requireAuth, async (c) => {
   const userId = (c as any).get("userId") as string;
   try {
     const customerId = await ensureStripeCustomer(userId);
-    const pmList = await stripe.paymentMethods.list({ customer: customerId, type: "card" });
-    const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+    const pmList = await getStripe().paymentMethods.list({ customer: customerId, type: "card" });
+    const customer = await getStripe().customers.retrieve(customerId) as Stripe.Customer;
     const defaultPmId = (customer.invoice_settings?.default_payment_method as string) ?? null;
 
     // If no default is set on Stripe but we have PMs, set the first as default
     if (!defaultPmId && pmList.data.length > 0) {
-      await stripe.customers.update(customerId, {
+      await getStripe().customers.update(customerId, {
         invoice_settings: { default_payment_method: pmList.data[0].id },
       });
     }
@@ -274,7 +286,7 @@ stripeRouter.delete("/methods/:pmId", requireAuth, async (c) => {
     const { stripe_payment_method_id, is_default } = res.rows[0];
 
     // Detach from Stripe
-    await stripe.paymentMethods.detach(stripe_payment_method_id);
+    await getStripe().paymentMethods.detach(stripe_payment_method_id);
 
     // Remove from DB
     await query("DELETE FROM user_payment_methods WHERE id = $1", [pmId]);
@@ -288,7 +300,7 @@ stripeRouter.delete("/methods/:pmId", requireAuth, async (c) => {
       if (next.rows.length > 0) {
         await query("UPDATE user_payment_methods SET is_default = true WHERE id = $1", [next.rows[0].id]);
         const customerId = await ensureStripeCustomer(userId);
-        await stripe.customers.update(customerId, {
+        await getStripe().customers.update(customerId, {
           invoice_settings: { default_payment_method: next.rows[0].stripe_payment_method_id },
         });
       }
@@ -321,7 +333,7 @@ stripeRouter.post("/default-method", requireAuth, async (c) => {
     await query("UPDATE user_payment_methods SET is_default = true  WHERE id = $1",      [paymentMethodId]);
 
     const customerId = await ensureStripeCustomer(userId);
-    await stripe.customers.update(customerId, {
+    await getStripe().customers.update(customerId, {
       invoice_settings: { default_payment_method: res.rows[0].stripe_payment_method_id },
     });
 
@@ -393,7 +405,7 @@ stripeRouter.post("/start-trial", requireAuth, async (c) => {
       [userId],
     );
 
-    const subscription = await stripe.subscriptions.create({
+    const subscription = await getStripe().subscriptions.create({
       customer: customerId,
       items: [{ price: priceId }],
       trial_period_days: TRIAL_DAYS[plan],
@@ -511,7 +523,7 @@ stripeRouter.post("/cancel", requireAuth, async (c) => {
     if (res.rows.length === 0) return c.json({ error: "No active subscription found" }, 404);
     if (!res.rows[0].stripe_subscription_id) return c.json({ error: "No linked Stripe subscription" }, 404);
 
-    const updated = await stripe.subscriptions.update(res.rows[0].stripe_subscription_id, {
+    const updated = await getStripe().subscriptions.update(res.rows[0].stripe_subscription_id, {
       cancel_at_period_end: true,
     });
 
@@ -544,7 +556,7 @@ stripeRouter.post("/reactivate", requireAuth, async (c) => {
     );
     if (res.rows.length === 0) return c.json({ error: "No pending cancellation found" }, 404);
 
-    await stripe.subscriptions.update(res.rows[0].stripe_subscription_id, {
+    await getStripe().subscriptions.update(res.rows[0].stripe_subscription_id, {
       cancel_at_period_end: false,
     });
 
@@ -571,7 +583,7 @@ stripeRouter.post("/webhook", async (c) => {
 
   try {
     if (WEBHOOK_SECRET) {
-      event = stripe.webhooks.constructEvent(rawBody, sig, WEBHOOK_SECRET);
+      event = getStripe().webhooks.constructEvent(rawBody, sig, WEBHOOK_SECRET);
     } else {
       // Dev-only: skip verification if secret not set
       console.warn("[stripe/webhook] STRIPE_WEBHOOK_SECRET not set — skipping signature check");
@@ -806,7 +818,7 @@ stripeRouter.post("/refund", requireAuth, async (c) => {
 
   try {
     // Retrieve the PaymentIntent to get charge ID
-    const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+    const pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
     const chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : (pi.latest_charge as any)?.id;
     if (!chargeId) return c.json({ error: "No charge found on this PaymentIntent" }, 400);
 
@@ -816,7 +828,7 @@ stripeRouter.post("/refund", requireAuth, async (c) => {
       refundParams.reason = reason as Stripe.RefundCreateParams.Reason;
     }
 
-    const stripeRefund = await stripe.refunds.create(refundParams);
+    const stripeRefund = await getStripe().refunds.create(refundParams);
 
     // Persist to refunds table
     const refundId = crypto.randomUUID();
@@ -918,7 +930,7 @@ stripeRouter.post("/account-action", requireAuth, async (c) => {
         [body.userId],
       );
       if (sub.rows[0]?.stripe_subscription_id) {
-        await stripe.subscriptions.cancel(sub.rows[0].stripe_subscription_id);
+        await getStripe().subscriptions.cancel(sub.rows[0].stripe_subscription_id);
         await query(
           "UPDATE subscriptions SET status = 'canceled', canceled_at = now(), updated_at = now() WHERE user_id = $1",
           [body.userId],

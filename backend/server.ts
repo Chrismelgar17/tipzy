@@ -12,6 +12,8 @@ console.log(`[startup] PORT=${PORT}`);
 console.log(`[startup] DATABASE_URL=${process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/:([^@]+)@/, ':***@') : 'NOT SET'}`);
 console.log(`[startup] PGSSL=${process.env.PGSSL}`);
 console.log(`[startup] NODE_ENV=${process.env.NODE_ENV}`);
+console.log(`[startup] STRIPE_SECRET_KEY=${process.env.STRIPE_SECRET_KEY ? 'SET ✓' : 'NOT SET — Stripe endpoints will return 500 until configured'}`);
+console.log(`[startup] STRIPE_WEBHOOK_SECRET=${process.env.STRIPE_WEBHOOK_SECRET ? 'SET ✓' : 'NOT SET — webhook signature verification disabled'}`);
 
 try {
   Bun.serve({

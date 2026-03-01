@@ -1,5 +1,6 @@
 import React, { useMemo, useEffect, useRef, useState, Component } from 'react';
-import { View, Text, StyleSheet, Platform, Animated, Easing, Image } from 'react-native';
+import { View, Text, StyleSheet, Platform, Animated, Easing, Image, TouchableOpacity } from 'react-native';
+import { MapPin } from 'lucide-react-native';
 
 // Error boundary so a native map crash doesn't take down the whole app
 class MapErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -45,52 +46,22 @@ const US_FALLBACK_REGION = {
 };
 
 const mapStyle = [
-  {
-    elementType: 'geometry',
-    stylers: [
-      { color: '#1d2c4d' },
-    ],
-  },
-  {
-    elementType: 'labels.text.fill',
-    stylers: [
-      { color: '#8ec3b9' },
-    ],
-  },
-  {
-    elementType: 'labels.text.stroke',
-    stylers: [
-      { color: '#1a3646' },
-    ],
-  },
-  {
-    featureType: 'administrative',
-    elementType: 'geometry',
-    stylers: [
-      { visibility: 'off' },
-    ],
-  },
-  {
-    featureType: 'poi',
-    elementType: 'geometry',
-    stylers: [
-      { color: '#283d6a' },
-    ],
-  },
-  {
-    featureType: 'road',
-    elementType: 'geometry',
-    stylers: [
-      { color: '#38414e' },
-    ],
-  },
-  {
-    featureType: 'water',
-    elementType: 'geometry',
-    stylers: [
-      { color: '#17263c' },
-    ],
-  },
+  { elementType: 'geometry', stylers: [{ color: '#09090f' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#09090f' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#7a7a8a' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#c0b8d4' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#0e0e1a' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#6b6b7a' }] },
+  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2a1f3d' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#16122a' }] },
+  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#9b8ec4' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#04040c' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#2a2a3a' }] },
 ];
 
 interface NativeMapViewProps {
@@ -134,12 +105,12 @@ function UserLocationMarker() {
           { transform: [{ scale: ringScale }], opacity: ringOpacity },
         ]}
       />
-      {/* App logo clipped to circle */}
+      {/* App logo clipped to circle — dark background so neon martini glass shows correctly */}
       <View style={styles.userLocationDot}>
         <Image
           source={require('../assets/images/icon.png')}
           style={styles.userLocationIcon}
-          resizeMode="cover"
+          resizeMode="contain"
         />
       </View>
     </View>
@@ -192,6 +163,24 @@ export default function NativeMapView(props: NativeMapViewProps) {
 }
 
 function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocation }: NativeMapViewProps) {
+  const mapRef = useRef<any>(null);
+
+  // The first time we receive a user location, smoothly fly the camera to it.
+  const hasAnimated = useRef(false);
+  useEffect(() => {
+    if (!userLocation || !mapRef.current || hasAnimated.current) return;
+    hasAnimated.current = true;
+    mapRef.current.animateToRegion(
+      {
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1,
+      },
+      800,
+    );
+  }, [userLocation]);
+
   // Build list of venues that have real coordinates
   const mappableVenues = useMemo(
     () => venues.filter(v => v.geo && (v.geo.lat !== 0 || v.geo.lng !== 0)),
@@ -201,13 +190,13 @@ function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocatio
   // Center on user location if available, else first venue, else US fallback
   const initialRegion = useMemo(() => {
     if (userLocation) {
-      // Show roughly a 25-mile radius around the user.
-      // 1° latitude ≈ 69 miles → 50 mile span (radius 25) ≈ 0.72°. Use 0.75 for padding.
+      // Show roughly a 5-mile radius around the user on open.
+      // 1° latitude ≈ 69 miles → ~7 mile span ≈ 0.1°.
       return {
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
-        latitudeDelta: 0.75,
-        longitudeDelta: 0.75,
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1,
       };
     }
     if (mappableVenues.length === 0) return US_FALLBACK_REGION;
@@ -234,9 +223,15 @@ function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocatio
   return (
     <View style={styles.mapContainer}>
       <MapView
+        ref={mapRef}
         style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        customMapStyle={mapStyle}
         initialRegion={initialRegion}
         showsUserLocation={false}
+        showsCompass
+        showsZoomControls={Platform.OS === 'android'}
+        rotateEnabled={false}
       >
         {/* Custom user location marker */}
         {userLocation && (
@@ -259,6 +254,27 @@ function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocatio
         ))}
       </MapView>
       
+      {/* Recenter on user location button */}
+      {userLocation && (
+        <TouchableOpacity
+          style={styles.recenterButton}
+          onPress={() =>
+            mapRef.current?.animateToRegion(
+              {
+                latitude: userLocation.latitude,
+                longitude: userLocation.longitude,
+                latitudeDelta: 0.1,
+                longitudeDelta: 0.1,
+              },
+              600,
+            )
+          }
+          activeOpacity={0.8}
+        >
+          <MapPin size={20} color="#a855f7" />
+        </TouchableOpacity>
+      )}
+
       {/* Legend for native map */}
       <View style={styles.legend}>
         <Text style={styles.legendTitle}>Crowd Level</Text>
@@ -340,18 +356,36 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     overflow: 'hidden',
+    backgroundColor: '#0B0B0F',
     borderWidth: 2,
     borderColor: 'rgba(168, 85, 247, 0.85)',
     shadowColor: '#a855f7',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 8,
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
     elevation: 8,
   },
   userLocationIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+  },
+  recenterButton: {
+    position: 'absolute',
+    bottom: 24,
+    left: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(11, 11, 15, 0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(168, 85, 247, 0.5)',
+    shadowColor: '#a855f7',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 6,
   },
   legend: {
     position: 'absolute',
