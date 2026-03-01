@@ -187,7 +187,7 @@ export default function BusinessSubscriptionScreen() {
     } catch (err: any) {
       const msg = err?.message ?? '';
       if (msg.includes('payment') || msg.includes('card')) {
-        Alert.alert('Add a card first', 'We need a payment method on file to start your trial (we won't charge it for 30 days).', [
+        Alert.alert('Add a card first', "We need a payment method on file to start your trial (we won't charge it for 30 days).", [
           { text: 'Add Card', onPress: () => router.push('/payment-methods') },
           { text: 'Cancel', style: 'cancel' },
         ]);
@@ -202,7 +202,7 @@ export default function BusinessSubscriptionScreen() {
   const handleCancel = () => {
     Alert.alert(
       'Cancel subscription?',
-      'You'll keep access until the end of the current billing period. You can reactivate anytime.',
+      "You'll keep access until the end of the current billing period. You can reactivate anytime.",
       [
         { text: 'Keep it', style: 'cancel' },
         {
