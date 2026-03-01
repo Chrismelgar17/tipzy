@@ -55,7 +55,7 @@ export async function setDefaultPaymentMethod(id: string): Promise<{ success: bo
  * Throws `{ code: 'no_payment_method' }` when none is on file.
  */
 export async function startTrial(
-  plan: 'customer' | 'business',
+  plan: 'customer_monthly' | 'customer_pro' | 'business_monthly' | 'business_pro' | 'customer' | 'business',
 ): Promise<{
   subscriptionId: string;
   status: string;

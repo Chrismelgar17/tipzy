@@ -38,16 +38,29 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", {
 
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
-// Trial durations
-const TRIAL_DAYS: Record<"customer" | "business", number> = {
-  customer: 7,
-  business: 90, // 3 months
+// Trial durations per full plan key
+const TRIAL_DAYS: Record<string, number> = {
+  customer_monthly: 7,   // Tipzy Plus
+  customer_pro:     7,   // Tipzy Pro
+  business_monthly: 30,  // Business Starter
+  business_pro:     90,  // Business Pro
 };
 
-// Monthly price IDs from Stripe dashboard (set in env)
-const PRICE_IDS: Record<"customer" | "business", string> = {
-  customer: process.env.STRIPE_CUSTOMER_PRICE_ID ?? "",
-  business: process.env.STRIPE_BUSINESS_PRICE_ID ?? "",
+// Price IDs — configure each in Railway env vars
+const PRICE_IDS: Record<string, string> = {
+  customer_monthly: process.env.STRIPE_CUSTOMER_MONTHLY_PRICE_ID ?? process.env.STRIPE_CUSTOMER_PRICE_ID ?? "",
+  customer_pro:     process.env.STRIPE_CUSTOMER_PRO_PRICE_ID     ?? "",
+  business_monthly: process.env.STRIPE_BUSINESS_MONTHLY_PRICE_ID ?? process.env.STRIPE_BUSINESS_PRICE_ID ?? "",
+  business_pro:     process.env.STRIPE_BUSINESS_PRO_PRICE_ID     ?? "",
+};
+
+// All valid plan keys
+const VALID_PLANS = Object.keys(PRICE_IDS);
+
+// Backward-compat: legacy short keys from old clients / frontend
+const PLAN_KEY_MAP: Record<string, string> = {
+  customer: "customer_monthly",
+  business: "business_monthly",
 };
 
 const stripeRouter = new Hono();
@@ -100,6 +113,78 @@ async function upsertPaymentMethod(
       isDefault,
     ],
   );
+}
+
+// ─── Helper: write to payment_audit_log ──────────────────────────────────────
+async function writeAuditLog(params: {
+  userId?: string | null;
+  stripeCustomerId?: string | null;
+  stripeEventId?: string | null;
+  eventType: string;
+  amountCents?: number | null;
+  currency?: string;
+  description?: string | null;
+  stripePaymentIntent?: string | null;
+  stripeInvoiceId?: string | null;
+  stripeSubscriptionId?: string | null;
+  status?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO payment_audit_log
+         (id, user_id, stripe_customer_id, stripe_event_id, event_type,
+          amount_cents, currency, description, stripe_payment_intent,
+          stripe_invoice_id, stripe_subscription_id, status, metadata)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT (stripe_event_id) DO NOTHING`,
+      [
+        crypto.randomUUID(),
+        params.userId ?? null,
+        params.stripeCustomerId ?? null,
+        params.stripeEventId ?? null,
+        params.eventType,
+        params.amountCents ?? null,
+        params.currency ?? "usd",
+        params.description ?? null,
+        params.stripePaymentIntent ?? null,
+        params.stripeInvoiceId ?? null,
+        params.stripeSubscriptionId ?? null,
+        params.status ?? "pending",
+        JSON.stringify(params.metadata ?? {}),
+      ],
+    );
+  } catch (err: any) {
+    console.error("[audit-log] Failed to write entry:", err?.message);
+  }
+}
+
+// ─── Helper: write account action ─────────────────────────────────────────────
+async function writeAccountAction(params: {
+  userId: string;
+  actionType: string;
+  reason?: string | null;
+  performedBy?: string | null;
+  expiresAt?: Date | null;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO account_actions (id, user_id, action_type, reason, performed_by, expires_at, metadata)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [
+        crypto.randomUUID(),
+        params.userId,
+        params.actionType,
+        params.reason ?? null,
+        params.performedBy ?? null,
+        params.expiresAt ?? null,
+        JSON.stringify(params.metadata ?? {}),
+      ],
+    );
+  } catch (err: any) {
+    console.error("[account-action] Failed to write entry:", err?.message);
+  }
 }
 
 // ─── POST /setup-intent ───────────────────────────────────────────────────────
@@ -252,12 +337,18 @@ stripeRouter.post("/default-method", requireAuth, async (c) => {
 // Stripe will automatically convert to paid at trial end.
 stripeRouter.post("/start-trial", requireAuth, async (c) => {
   const userId = (c as any).get("userId") as string;
-  let body: { plan?: "customer" | "business" };
+  let body: { plan?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON" }, 400); }
 
-  const plan = body.plan;
-  if (!plan || !["customer", "business"].includes(plan)) {
-    return c.json({ error: 'plan must be "customer" or "business"' }, 400);
+  const rawPlan = body.plan ?? "";
+  // Backward-compat: 'customer' → 'customer_monthly', 'business' → 'business_monthly'
+  const plan = PLAN_KEY_MAP[rawPlan] ?? rawPlan;
+
+  if (!plan || !VALID_PLANS.includes(plan)) {
+    return c.json(
+      { error: `Invalid plan. Valid plans: ${VALID_PLANS.join(", ")}` },
+      400,
+    );
   }
 
   try {
@@ -288,7 +379,7 @@ stripeRouter.post("/start-trial", requireAuth, async (c) => {
     // ── 3. Validate price configured ─────────────────────────────────────────
     const priceId = PRICE_IDS[plan];
     if (!priceId) {
-      console.error(`[stripe/start-trial] Missing env var: STRIPE_${plan.toUpperCase()}_PRICE_ID`);
+      console.error(`[stripe/start-trial] Missing env var for plan "${plan}"`);
       return c.json(
         { error: `Stripe price for "${plan}" plan is not configured on the server.` },
         500,
@@ -342,7 +433,7 @@ stripeRouter.post("/start-trial", requireAuth, async (c) => {
         customerId,
         subscription.id,
         defaultPm.rows[0]?.stripe_payment_method_id ?? null,
-        `${plan}_monthly`,
+        plan,   // full plan key: 'customer_monthly', 'customer_pro', 'business_monthly', 'business_pro'
         subscription.status,
         trialStart,
         trialEnd,
@@ -351,10 +442,22 @@ stripeRouter.post("/start-trial", requireAuth, async (c) => {
       ],
     );
 
+    // ── 6. Write audit entry ──────────────────────────────────────────────
+    await writeAuditLog({
+      userId,
+      stripeCustomerId: customerId,
+      stripeEventId: `trial_start_${subscription.id}`,
+      eventType: "subscription.trial_started",
+      stripeSubscriptionId: subscription.id,
+      status: subscription.status,
+      description: `Trial started: ${plan} (${TRIAL_DAYS[plan]} days)`,
+      metadata: { plan, trialDays: TRIAL_DAYS[plan] },
+    });
+
     return c.json({
       subscriptionId: subscription.id,
       status: subscription.status,
-      plan: `${plan}_monthly`,
+      plan,
       trialEnd: trialEnd?.toISOString() ?? null,
       currentPeriodEnd: periodEnd?.toISOString() ?? null,
       trialDays: TRIAL_DAYS[plan],
@@ -510,6 +613,10 @@ stripeRouter.post("/webhook", async (c) => {
 
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
+        const subRow = (await query<{ user_id: string }>(
+          "SELECT user_id FROM subscriptions WHERE stripe_subscription_id = $1",
+          [sub.id],
+        )).rows[0];
         await query(
           `UPDATE subscriptions SET
              status     = 'canceled',
@@ -518,6 +625,23 @@ stripeRouter.post("/webhook", async (c) => {
            WHERE stripe_subscription_id = $1`,
           [sub.id],
         );
+        await writeAuditLog({
+          userId: subRow?.user_id ?? null,
+          stripeCustomerId: sub.customer as string,
+          stripeEventId: event.id,
+          eventType: event.type,
+          stripeSubscriptionId: sub.id,
+          status: "canceled",
+          description: `Subscription canceled: ${sub.id}`,
+        });
+        if (subRow?.user_id) {
+          await writeAccountAction({
+            userId: subRow.user_id,
+            actionType: "subscription_canceled",
+            reason: "Subscription deleted by Stripe webhook",
+            metadata: { stripeSubscriptionId: sub.id },
+          });
+        }
         break;
       }
 
@@ -531,6 +655,33 @@ stripeRouter.post("/webhook", async (c) => {
             [subId],
           );
         }
+        const subRowS = subId
+          ? (await query<{ user_id: string; stripe_customer_id: string }>(
+              "SELECT user_id, stripe_customer_id FROM subscriptions WHERE stripe_subscription_id = $1",
+              [subId],
+            )).rows[0]
+          : null;
+        await writeAuditLog({
+          userId: subRowS?.user_id ?? null,
+          stripeCustomerId: (inv.customer as string) ?? subRowS?.stripe_customer_id ?? null,
+          stripeEventId: event.id,
+          eventType: event.type,
+          amountCents: inv.amount_paid,
+          currency: inv.currency,
+          stripeInvoiceId: inv.id,
+          stripeSubscriptionId: subId,
+          status: "succeeded",
+          description: `Invoice paid: ${inv.id}`,
+        });
+        // Resolve any previous payment-failed lock
+        if (subRowS?.user_id) {
+          await writeAccountAction({
+            userId: subRowS.user_id,
+            actionType: "payment_failed_resolved",
+            reason: `Invoice ${inv.id} payment succeeded`,
+            metadata: { stripeInvoiceId: inv.id },
+          });
+        }
         break;
       }
 
@@ -542,6 +693,32 @@ stripeRouter.post("/webhook", async (c) => {
             "UPDATE subscriptions SET status = 'past_due', updated_at = now() WHERE stripe_subscription_id = $1",
             [subId],
           );
+        }
+        const subRowF = subId
+          ? (await query<{ user_id: string; stripe_customer_id: string }>(
+              "SELECT user_id, stripe_customer_id FROM subscriptions WHERE stripe_subscription_id = $1",
+              [subId],
+            )).rows[0]
+          : null;
+        await writeAuditLog({
+          userId: subRowF?.user_id ?? null,
+          stripeCustomerId: (inv.customer as string) ?? subRowF?.stripe_customer_id ?? null,
+          stripeEventId: event.id,
+          eventType: event.type,
+          amountCents: inv.amount_due,
+          currency: inv.currency,
+          stripeInvoiceId: inv.id,
+          stripeSubscriptionId: subId,
+          status: "failed",
+          description: `Invoice payment failed: ${inv.id}`,
+        });
+        if (subRowF?.user_id) {
+          await writeAccountAction({
+            userId: subRowF.user_id,
+            actionType: "payment_failed_lock",
+            reason: `Invoice ${inv.id} payment failed`,
+            metadata: { stripeInvoiceId: inv.id, stripeSubscriptionId: subId },
+          });
         }
         break;
       }
@@ -564,6 +741,205 @@ stripeRouter.post("/webhook", async (c) => {
   }
 
   return c.json({ received: true });
+});
+
+// ─── GET /audit-log ───────────────────────────────────────────────────────────
+// Returns the payment audit ledger for the authenticated user (last 100 rows).
+// Admins can pass ?userId=xxx to view another user's ledger.
+stripeRouter.get("/audit-log", requireAuth, async (c) => {
+  const requesterId = (c as any).get("userId") as string;
+  const targetUserId = c.req.query("userId") ?? requesterId;
+
+  // Only allow viewing other users' logs if admin
+  if (targetUserId !== requesterId) {
+    const requester = await query<{ role: string }>(
+      "SELECT role FROM users WHERE id = $1",
+      [requesterId],
+    );
+    if (requester.rows[0]?.role !== "admin") {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+  }
+
+  try {
+    const res = await query(
+      `SELECT id, event_type, amount_cents, currency, description,
+              stripe_invoice_id, stripe_subscription_id, status, metadata, created_at
+       FROM payment_audit_log
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [targetUserId],
+    );
+    return c.json({ entries: res.rows });
+  } catch (err: any) {
+    return c.json({ error: err?.message ?? "Failed to fetch audit log" }, 500);
+  }
+});
+
+// ─── POST /refund ─────────────────────────────────────────────────────────────
+// Issues a Stripe refund and records it in the refunds table.
+// Body: { paymentIntentId, amountCents?, reason?, notes?, orderId?, subscriptionId? }
+// Requires admin role or the user who owns the payment.
+stripeRouter.post("/refund", requireAuth, async (c) => {
+  const requesterId = (c as any).get("userId") as string;
+
+  let body: {
+    paymentIntentId: string;
+    amountCents?: number;
+    reason?: string;
+    notes?: string;
+    orderId?: string;
+    subscriptionId?: string;
+    targetUserId?: string;
+  };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON" }, 400); }
+
+  const { paymentIntentId, amountCents, reason, notes, orderId, subscriptionId, targetUserId } = body;
+  if (!paymentIntentId) return c.json({ error: "paymentIntentId is required" }, 400);
+
+  // Admin-only or self
+  const requester = await query<{ role: string }>("SELECT role FROM users WHERE id = $1", [requesterId]);
+  const isAdmin = requester.rows[0]?.role === "admin";
+  const userId = targetUserId ?? requesterId;
+  if (userId !== requesterId && !isAdmin) return c.json({ error: "Forbidden" }, 403);
+
+  try {
+    // Retrieve the PaymentIntent to get charge ID
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+    const chargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : (pi.latest_charge as any)?.id;
+    if (!chargeId) return c.json({ error: "No charge found on this PaymentIntent" }, 400);
+
+    const refundParams: Stripe.RefundCreateParams = { charge: chargeId };
+    if (amountCents) refundParams.amount = amountCents;
+    if (reason && ["duplicate", "fraudulent", "requested_by_customer"].includes(reason)) {
+      refundParams.reason = reason as Stripe.RefundCreateParams.Reason;
+    }
+
+    const stripeRefund = await stripe.refunds.create(refundParams);
+
+    // Persist to refunds table
+    const refundId = crypto.randomUUID();
+    await query(
+      `INSERT INTO refunds
+         (id, user_id, order_id, subscription_id, stripe_refund_id, stripe_payment_intent,
+          amount_cents, currency, reason, status, notes, requested_by, processed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        refundId,
+        userId,
+        orderId ?? null,
+        subscriptionId ?? null,
+        stripeRefund.id,
+        paymentIntentId,
+        stripeRefund.amount,
+        stripeRefund.currency,
+        reason ?? null,
+        stripeRefund.status ?? "pending",
+        notes ?? null,
+        requesterId,
+        stripeRefund.status === "succeeded" ? new Date() : null,
+      ],
+    );
+
+    // Audit entry
+    await writeAuditLog({
+      userId,
+      stripeEventId: `refund_${stripeRefund.id}`,
+      eventType: "refund.created",
+      amountCents: -(stripeRefund.amount),
+      currency: stripeRefund.currency,
+      stripePaymentIntent: paymentIntentId,
+      status: stripeRefund.status ?? "pending",
+      description: `Refund issued: ${stripeRefund.id}`,
+      metadata: { reason, notes, stripeRefundId: stripeRefund.id },
+    });
+
+    return c.json({
+      success: true,
+      refundId,
+      stripeRefundId: stripeRefund.id,
+      amountCents: stripeRefund.amount,
+      status: stripeRefund.status,
+    });
+  } catch (err: any) {
+    console.error("[stripe/refund]", err?.message);
+    return c.json({ error: err?.message ?? "Failed to issue refund" }, 500);
+  }
+});
+
+// ─── POST /account-action ─────────────────────────────────────────────────────
+// Admin-only: record a suspension, ban, trial revocation, or manual override.
+stripeRouter.post("/account-action", requireAuth, async (c) => {
+  const requesterId = (c as any).get("userId") as string;
+
+  const requester = await query<{ role: string }>("SELECT role FROM users WHERE id = $1", [requesterId]);
+  if (requester.rows[0]?.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+
+  let body: {
+    userId: string;
+    actionType: string;
+    reason?: string;
+    expiresAt?: string;
+    metadata?: Record<string, unknown>;
+  };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON" }, 400); }
+
+  const ALLOWED_ACTIONS = [
+    "suspended", "unsuspended", "banned", "unbanned",
+    "subscription_canceled", "subscription_paused", "subscription_resumed",
+    "payment_failed_lock", "payment_failed_resolved",
+    "trial_revoked", "manual_override",
+  ];
+
+  if (!body.userId) return c.json({ error: "userId is required" }, 400);
+  if (!ALLOWED_ACTIONS.includes(body.actionType)) {
+    return c.json({ error: `actionType must be one of: ${ALLOWED_ACTIONS.join(", ")}` }, 400);
+  }
+
+  try {
+    // Apply suspension to users table when relevant
+    if (body.actionType === "suspended") {
+      await query(
+        "UPDATE users SET is_suspended = true, suspension_reason = $1, suspended_until = $2 WHERE id = $3",
+        [body.reason ?? null, body.expiresAt ? new Date(body.expiresAt) : null, body.userId],
+      );
+    } else if (body.actionType === "unsuspended") {
+      await query(
+        "UPDATE users SET is_suspended = false, suspension_reason = NULL, suspended_until = NULL WHERE id = $1",
+        [body.userId],
+      );
+    }
+
+    // Cancel Stripe subscription if action requires it
+    if (["trial_revoked", "subscription_canceled", "banned"].includes(body.actionType)) {
+      const sub = await query<{ stripe_subscription_id: string }>(
+        "SELECT stripe_subscription_id FROM subscriptions WHERE user_id = $1 AND status NOT IN ('canceled','incomplete_expired') LIMIT 1",
+        [body.userId],
+      );
+      if (sub.rows[0]?.stripe_subscription_id) {
+        await stripe.subscriptions.cancel(sub.rows[0].stripe_subscription_id);
+        await query(
+          "UPDATE subscriptions SET status = 'canceled', canceled_at = now(), updated_at = now() WHERE user_id = $1",
+          [body.userId],
+        );
+      }
+    }
+
+    await writeAccountAction({
+      userId: body.userId,
+      actionType: body.actionType,
+      reason: body.reason ?? null,
+      performedBy: requesterId,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+      metadata: body.metadata ?? {},
+    });
+
+    return c.json({ success: true });
+  } catch (err: any) {
+    console.error("[stripe/account-action]", err?.message);
+    return c.json({ error: err?.message ?? "Failed to apply account action" }, 500);
+  }
 });
 
 // ─── Row mapper ───────────────────────────────────────────────────────────────

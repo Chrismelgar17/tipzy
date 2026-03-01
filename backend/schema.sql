@@ -163,6 +163,85 @@ CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_user_id_unique
 CREATE INDEX IF NOT EXISTS subscriptions_stripe_sub_idx
   ON subscriptions (stripe_subscription_id);
 
+-- ── Phase 4.1: 3+ plan tiers, payment audit, refunds, account actions ─────────
+
+-- Expand plan check to support 4 branded tiers (idempotent via drop + re-add)
+ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_check;
+ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_check
+  CHECK (plan IN (
+    'customer_monthly',  -- Tipzy Plus      $4.99 /mo   7-day trial
+    'customer_pro',      -- Tipzy Pro       $9.99 /mo   7-day trial
+    'business_monthly',  -- Biz Starter    $29.99 /mo  30-day trial
+    'business_pro'       -- Biz Pro        $59.99 /mo  90-day trial
+  ));
+
+-- Account suspension fields on users (idempotent)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspended      BOOLEAN    NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_until   TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_reason TEXT;
+
+-- Immutable payment audit ledger ─────────────────────────────────────────────
+-- Every Stripe event and internal billing action is written here for compliance.
+CREATE TABLE IF NOT EXISTS payment_audit_log (
+  id                     TEXT        PRIMARY KEY,
+  user_id                TEXT        REFERENCES users(id) ON DELETE SET NULL,
+  stripe_customer_id     TEXT,
+  stripe_event_id        TEXT        UNIQUE,   -- Stripe evt_… used for dedup
+  event_type             TEXT        NOT NULL, -- e.g. invoice.payment_succeeded
+  amount_cents           INTEGER,              -- positive=charge, negative=refund
+  currency               TEXT        NOT NULL DEFAULT 'usd',
+  description            TEXT,
+  stripe_payment_intent  TEXT,
+  stripe_invoice_id      TEXT,
+  stripe_subscription_id TEXT,
+  status                 TEXT        NOT NULL DEFAULT 'pending',
+  metadata               JSONB       NOT NULL DEFAULT '{}',
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS pal_user_id_idx ON payment_audit_log (user_id, created_at DESC);
+
+-- Refunds ledger ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS refunds (
+  id                    TEXT        PRIMARY KEY,
+  user_id               TEXT        REFERENCES users(id)         ON DELETE SET NULL,
+  order_id              TEXT        REFERENCES orders(id)        ON DELETE SET NULL,
+  subscription_id       TEXT        REFERENCES subscriptions(id) ON DELETE SET NULL,
+  stripe_refund_id      TEXT        UNIQUE,          -- re_…
+  stripe_payment_intent TEXT,
+  amount_cents          INTEGER     NOT NULL,
+  currency              TEXT        NOT NULL DEFAULT 'usd',
+  reason                TEXT,                        -- duplicate, fraudulent, requested_by_customer …
+  status                TEXT        NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','succeeded','failed','canceled')),
+  notes                 TEXT,
+  requested_by          TEXT        REFERENCES users(id) ON DELETE SET NULL,
+  processed_at          TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS refunds_user_id_idx ON refunds (user_id, created_at DESC);
+
+-- Account actions log ─────────────────────────────────────────────────────────
+-- Records every suspension, ban, trial revocation, and manual override.
+CREATE TABLE IF NOT EXISTS account_actions (
+  id           TEXT        PRIMARY KEY,
+  user_id      TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  action_type  TEXT        NOT NULL
+    CHECK (action_type IN (
+      'suspended','unsuspended',
+      'banned','unbanned',
+      'subscription_canceled','subscription_paused','subscription_resumed',
+      'payment_failed_lock','payment_failed_resolved',
+      'trial_revoked','manual_override'
+    )),
+  reason       TEXT,
+  performed_by TEXT        REFERENCES users(id) ON DELETE SET NULL,  -- NULL = system
+  expires_at   TIMESTAMPTZ,                                           -- NULL = permanent
+  metadata     JSONB       NOT NULL DEFAULT '{}',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS account_actions_user_idx ON account_actions (user_id, created_at DESC);
+
 -- Seed admin (optional if not present)
 INSERT INTO users (id, email, name, password_hash, role)
 VALUES ('admin_seed', 'admin@tipzy.app', 'Tipzy Admin', '__PENDING__', 'admin')

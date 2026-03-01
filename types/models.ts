@@ -224,7 +224,7 @@ export type SubscriptionStatus =
 export interface Subscription {
   id: string;
   stripeSubscriptionId: string | null;
-  plan: 'customer_monthly' | 'business_monthly';
+  plan: 'customer_monthly' | 'customer_pro' | 'business_monthly' | 'business_pro';
   status: SubscriptionStatus;
   trialStart: string | null;
   trialEnd: string | null;
@@ -235,11 +235,59 @@ export interface Subscription {
   createdAt: string;
 }
 
-export interface NotificationSettings {
-  pushNotifications: boolean;
-  emailNotifications: boolean;
-  inAppNotifications: boolean;
+// ─── Payment audit / billing types ─────────────────────────────────────────
+
+export type RefundStatus = 'pending' | 'succeeded' | 'failed' | 'canceled';
+
+export interface Refund {
+  id: string;
+  userId: string | null;
+  orderId: string | null;
+  subscriptionId: string | null;
+  stripeRefundId: string | null;
+  stripePaymentIntent: string | null;
+  amountCents: number;
+  currency: string;
+  reason: string | null;
+  status: RefundStatus;
+  notes: string | null;
+  requestedBy: string | null;
+  processedAt: string | null;
+  createdAt: string;
 }
+
+export type AccountActionType =
+  | 'suspended' | 'unsuspended'
+  | 'banned' | 'unbanned'
+  | 'subscription_canceled' | 'subscription_paused' | 'subscription_resumed'
+  | 'payment_failed_lock' | 'payment_failed_resolved'
+  | 'trial_revoked' | 'manual_override';
+
+export interface AccountAction {
+  id: string;
+  userId: string;
+  actionType: AccountActionType;
+  reason: string | null;
+  performedBy: string | null;
+  expiresAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface PaymentAuditEntry {
+  id: string;
+  eventType: string;
+  amountCents: number | null;
+  currency: string;
+  description: string | null;
+  stripeInvoiceId: string | null;
+  stripeSubscriptionId: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface NotificationSettings {
 
 export interface PrivacySettings {
   twoFactorEnabled: boolean;

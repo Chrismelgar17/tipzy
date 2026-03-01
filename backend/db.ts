@@ -129,7 +129,7 @@ export interface DbSubscription {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   stripe_payment_method_id: string | null;
-  plan: 'customer_monthly' | 'business_monthly';
+  plan: 'customer_monthly' | 'customer_pro' | 'business_monthly' | 'business_pro';
   status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid';
   trial_start: string | null;
   trial_end: string | null;
@@ -139,6 +139,54 @@ export interface DbSubscription {
   canceled_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// ── Phase 4.1: Audit, refunds, account actions ───────────────────────────────
+
+export interface DbPaymentAuditLog {
+  id: string;
+  user_id: string | null;
+  stripe_customer_id: string | null;
+  stripe_event_id: string | null;
+  event_type: string;
+  amount_cents: number | null;
+  currency: string;
+  description: string | null;
+  stripe_payment_intent: string | null;
+  stripe_invoice_id: string | null;
+  stripe_subscription_id: string | null;
+  status: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface DbRefund {
+  id: string;
+  user_id: string | null;
+  order_id: string | null;
+  subscription_id: string | null;
+  stripe_refund_id: string | null;
+  stripe_payment_intent: string | null;
+  amount_cents: number;
+  currency: string;
+  reason: string | null;
+  status: 'pending' | 'succeeded' | 'failed' | 'canceled';
+  notes: string | null;
+  requested_by: string | null;
+  processed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DbAccountAction {
+  id: string;
+  user_id: string;
+  action_type: string;
+  reason: string | null;
+  performed_by: string | null;
+  expires_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
 
 const connectionString = process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/tipzy";

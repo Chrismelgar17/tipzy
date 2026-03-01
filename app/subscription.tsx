@@ -44,11 +44,12 @@ import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
 import * as paymentService from '@/lib/payment.service';
 
-// ─── Plan cards data ──────────────────────────────────────────────────────────
+// ─── Plan catalogue (3+ branded tiers) ──────────────────────────────────────
 const PLANS = [
   {
-    key: 'customer' as const,
-    label: 'Tipzy Access',
+    key: 'customer_monthly' as const,
+    brand: 'Tipzy Plus',
+    tagline: 'For nightlife fans',
     price: '$4.99',
     period: '/mo',
     trialLabel: '7-day free trial',
@@ -64,21 +65,62 @@ const PLANS = [
     ],
   },
   {
-    key: 'business' as const,
-    label: 'Business Pro',
+    key: 'customer_pro' as const,
+    brand: 'Tipzy Pro',
+    tagline: 'For power users',
+    badge: 'Most Popular',
+    price: '$9.99',
+    period: '/mo',
+    trialLabel: '7-day free trial',
+    trialDays: 7,
+    icon: Star,
+    color: '#2563EB',
+    features: [
+      'Everything in Tipzy Plus',
+      'Priority entry notifications',
+      'Exclusive pre-sale access',
+      'Advanced filters & search',
+      'VIP event recommendations',
+      'Dedicated support',
+    ],
+  },
+  {
+    key: 'business_monthly' as const,
+    brand: 'Business Starter',
+    tagline: 'For venue owners',
     price: '$29.99',
     period: '/mo',
-    trialLabel: '3-month free trial',
-    trialDays: 90,
+    trialLabel: '30-day free trial',
+    trialDays: 30,
     icon: Building2,
     color: '#059669',
     features: [
-      'Everything in Tipzy Access',
       'Venue management dashboard',
       'Real-time capacity tracking',
       'Order management',
-      'Analytics & reporting',
       'QR scanner for check-ins',
+      'Basic analytics',
+      'Customer notifications',
+    ],
+  },
+  {
+    key: 'business_pro' as const,
+    brand: 'Business Pro',
+    tagline: 'Scale your venue',
+    badge: 'Best Value',
+    price: '$59.99',
+    period: '/mo',
+    trialLabel: '90-day free trial',
+    trialDays: 90,
+    icon: Building2,
+    color: '#D97706',
+    features: [
+      'Everything in Business Starter',
+      'Advanced analytics & reporting',
+      'Multi-venue management',
+      'Staff account access',
+      'API integrations',
+      'Priority support & onboarding',
     ],
   },
 ];
@@ -117,12 +159,12 @@ export default function SubscriptionScreen() {
     reactivate,
   } = useSubscription();
 
-  const [starting, setStarting] = useState<'customer' | 'business' | null>(null);
+  const [starting, setStarting] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
   const [reactivating, setReactivating] = useState(false);
 
   // ── Start trial flow ────────────────────────────────────────────────────────
-  const handleStartTrial = async (plan: 'customer' | 'business') => {
+  const handleStartTrial = async (plan: string) => {
     if (!user) {
       router.push('/(auth)/signin' as any);
       return;
@@ -158,7 +200,7 @@ export default function SubscriptionScreen() {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert(
         'Trial Started! 🎉',
-        `Your ${plan === 'business' ? '3-month' : '7-day'} free trial is now active. We'll remind you before it ends.`,
+        `Your ${PLANS.find(p => p.key === plan)?.trialLabel ?? 'free trial'} is now active. We\'ll remind you before it ends.`,
         [{ text: 'Got it' }],
       );
     } catch (err: any) {
@@ -260,7 +302,8 @@ export default function SubscriptionScreen() {
             <View style={styles.activeCardHeader}>
               <Star size={20} color={theme.colors.purple} />
               <Text style={styles.activeCardTitle}>
-                {subscription.plan === 'business_monthly' ? 'Business Pro' : 'Tipzy Access'}
+                {PLANS.find(p => p.key === subscription.plan)?.brand
+                  ?? (subscription.plan.startsWith('business') ? 'Business' : 'Tipzy')}
               </Text>
               <StatusBadge />
             </View>
@@ -366,13 +409,22 @@ export default function SubscriptionScreen() {
               const isStarting = starting === plan.key;
 
               return (
-                <View key={plan.key} style={styles.planCard}>
+                <View key={plan.key} style={[
+                  styles.planCard,
+                  (plan as any).badge ? { borderColor: plan.color + '66', borderWidth: 2 } : {},
+                ]}>
+                  {(plan as any).badge && (
+                    <View style={[styles.popularBadge, { backgroundColor: plan.color }]}>
+                      <Text style={styles.popularBadgeText}>{(plan as any).badge}</Text>
+                    </View>
+                  )}
                   <View style={[styles.planIconWrap, { backgroundColor: plan.color + '22' }]}>
                     <PlanIcon size={28} color={plan.color} />
                   </View>
 
                   <View style={styles.planHeader}>
-                    <Text style={styles.planName}>{plan.label}</Text>
+                    <Text style={styles.planName}>{plan.brand}</Text>
+                    <Text style={styles.planTagline}>{plan.tagline}</Text>
                     <View style={styles.planPriceRow}>
                       <Text style={styles.planPrice}>{plan.price}</Text>
                       <Text style={styles.planPeriod}>{plan.period}</Text>
@@ -606,6 +658,21 @@ function makeStyles(theme: any) {
       borderRadius: 16,
       borderWidth: 1,
       borderColor: theme.colors.border,
+      overflow: 'hidden',
+    },
+    popularBadge: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 20,
+    },
+    popularBadgeText: {
+      color: '#fff',
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.3,
     },
     planIconWrap: {
       width: 56,
@@ -622,7 +689,12 @@ function makeStyles(theme: any) {
       fontSize: 20,
       fontWeight: '700',
       color: theme.colors.text.primary,
-      marginBottom: 4,
+      marginBottom: 2,
+    },
+    planTagline: {
+      fontSize: 13,
+      color: theme.colors.text.tertiary,
+      marginBottom: 8,
     },
     planPriceRow: {
       flexDirection: 'row',

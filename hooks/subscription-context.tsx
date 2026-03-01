@@ -43,7 +43,7 @@ interface SubscriptionState {
 
   // Actions
   refresh: () => Promise<void>;
-  startTrial: (plan: 'customer' | 'business') => Promise<void>;
+  startTrial: (plan: 'customer_monthly' | 'customer_pro' | 'business_monthly' | 'business_pro' | 'customer' | 'business') => Promise<void>;
   cancel: () => Promise<void>;
   reactivate: () => Promise<void>;
 }
@@ -91,7 +91,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(
     }, [refresh]);
 
     // ── Start trial ─────────────────────────────────────────────────────────
-    const startTrial = useCallback(async (plan: 'customer' | 'business') => {
+    const startTrial = useCallback(async (plan: 'customer_monthly' | 'customer_pro' | 'business_monthly' | 'business_pro' | 'customer' | 'business') => {
       setIsLoading(true);
       setError(null);
       try {
