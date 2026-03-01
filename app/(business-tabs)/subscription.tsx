@@ -241,7 +241,7 @@ export default function BusinessSubscriptionScreen() {
       <LinearGradient colors={['#1A1A2E', '#16213E', '#0F3460']} style={s.hero}>
         <Text style={s.heroEyebrow}>YOUR PLAN</Text>
         <Text style={s.heroTitle}>
-          {hasAccess ? '🚀 You're live on Tipzy' : '🎯 Grow your crowd'}
+          {hasAccess ? "🚀 You're live on Tipzy" : '🎯 Grow your crowd'}
         </Text>
         <Text style={s.heroSub}>
           {hasAccess
