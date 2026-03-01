@@ -22,9 +22,11 @@ import {
   QrCode,
   Building2,
   User,
+  Zap,
 } from 'lucide-react-native';
 import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
+import { useSubscription } from '@/hooks/subscription-context';
 
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -32,6 +34,7 @@ import * as Haptics from 'expo-haptics';
 export default function ProfileScreen() {
   const { theme } = useTheme();
   const { user, signOut, requireAuth, emailVerified, resendVerification, pendingVerificationEmail, isLoading, isBusiness, businessStatus } = useAuth();
+  const { subscription, isTrialing, daysLeftInTrial } = useSubscription();
   const insets = useSafeAreaInsets();
 
   const styles = StyleSheet.create({
@@ -317,6 +320,18 @@ export default function ProfileScreen() {
       label: 'Payment Methods',
       value: '',
       onPress: () => router.push('/payment-methods' as any),
+    },
+    {
+      icon: Zap,
+      label: 'Subscription',
+      value: isTrialing
+        ? `Trial · ${daysLeftInTrial}d left`
+        : subscription?.status === 'active'
+        ? 'Active'
+        : subscription?.status === 'past_due'
+        ? 'Payment Failed'
+        : 'Free',
+      onPress: () => router.push('/subscription' as any),
     },
     {
       icon: Bell,

@@ -198,12 +198,41 @@ export interface Message {
 
 export interface PaymentMethod {
   id: string;
-  type: 'card' | 'paypal' | 'apple_pay' | 'google_pay';
-  cardholderName?: string;
-  cardNumber?: string; // Last 4 digits
-  expirationDate?: string;
+  /** Stripe PaymentMethod ID (pm_…) */
+  stripePaymentMethodId: string;
+  type: 'card' | 'apple_pay' | 'google_pay';
+  /** visa, mastercard, amex, discover, etc. */
+  brand?: string;
+  /** Last 4 digits */
+  last4?: string;
+  expMonth?: number;
+  expYear?: number;
   isDefault: boolean;
-  createdAt: Date;
+  createdAt: Date | string;
+}
+
+/** Subscription status exactly as returned by Stripe */
+export type SubscriptionStatus =
+  | 'trialing'
+  | 'active'
+  | 'past_due'
+  | 'canceled'
+  | 'incomplete'
+  | 'incomplete_expired'
+  | 'unpaid';
+
+export interface Subscription {
+  id: string;
+  stripeSubscriptionId: string | null;
+  plan: 'customer_monthly' | 'business_monthly';
+  status: SubscriptionStatus;
+  trialStart: string | null;
+  trialEnd: string | null;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  canceledAt: string | null;
+  createdAt: string;
 }
 
 export interface NotificationSettings {

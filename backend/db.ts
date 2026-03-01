@@ -109,6 +109,38 @@ export interface DbEvent {
   updated_at: string;
 }
 
+// ── Phase 4: Stripe ───────────────────────────────────────────────────────────
+
+export interface DbUserPaymentMethod {
+  id: string;
+  user_id: string;
+  stripe_payment_method_id: string;
+  card_brand: string | null;
+  card_last4: string | null;
+  card_exp_month: number | null;
+  card_exp_year: number | null;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface DbSubscription {
+  id: string;
+  user_id: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_payment_method_id: string | null;
+  plan: 'customer_monthly' | 'business_monthly';
+  status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid';
+  trial_start: string | null;
+  trial_end: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  canceled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 const connectionString = process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/tipzy";
 
 export const pool = new Pool({

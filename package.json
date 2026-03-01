@@ -20,6 +20,7 @@
     "@hono/node-server": "^1.19.9",
     "@hono/trpc-server": "^0.4.0",
     "@nkzw/create-context-hook": "^1.1.0",
+    "@stripe/stripe-react-native": "0.40.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-google-signin/google-signin": "^16.1.1",

@@ -3,9 +3,6 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as WebBrowser from 'expo-web-browser';
 import { configureGoogleSignIn } from '@/lib/google-signin';
-
-// Needed for web OAuth flows (Apple web, etc.) — complete any pending auth session.
-WebBrowser.maybeCompleteAuthSession();
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AuthProvider } from "@/hooks/auth-context";
@@ -14,17 +11,41 @@ import { ChatProvider } from "@/hooks/chat-context";
 import { ThemeProvider, useTheme } from "@/hooks/theme-context";
 import { VenuesProvider } from "@/hooks/venues-context";
 import { CapacityProvider } from "@/hooks/capacity-context";
+import { SubscriptionProvider } from "@/hooks/subscription-context";
 import { StatusBar } from "expo-status-bar";
 import { ErrorBoundary } from "react-error-boundary";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { clearAllAppData } from "@/utils/storage";
 import { trpc, trpcClient } from "@/lib/trpc";
 
+// ─── Safe Stripe Provider ─────────────────────────────────────────────────────
+// @stripe/stripe-react-native is a native module; guard with try/catch so
+// OTA / Expo Go builds don't crash when the native module isn't linked.
+let StripeProvider: React.ComponentType<{ publishableKey: string; children: React.ReactNode }> =
+  ({ children }) => <>{children}</>;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  StripeProvider = require('@stripe/stripe-react-native').StripeProvider;
+} catch {
+  // Native Stripe module not linked — PaymentSheet will gracefully alert
+}
+const STRIPE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
+
+// Complete any pending web OAuth session (Apple web, etc.) — must be called
+// after all imports so every module is fully initialized first.
+WebBrowser.maybeCompleteAuthSession();
+
 // Keep the splash visible until we explicitly hide it.
 // Guard with catch to avoid a module-scope unhandled rejection in production.
 void SplashScreen.preventAutoHideAsync().catch(() => {
   // no-op
 });
+
+// ── Failsafe splash hide ─────────────────────────────────────────────────
+// If the React render tree fails to mount (e.g. a synchronous crash before
+// ThemedRootLayout's useEffect fires), this timer ensures the splash is
+// hidden within 3 s so the app is never permanently frozen on a white screen.
+setTimeout(() => void SplashScreen.hideAsync().catch(() => {}), 3000);
 
 const queryClient = new QueryClient();
 
@@ -148,6 +169,7 @@ function RootLayoutNav() {
         <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
         <Stack.Screen name="privacy-security" options={{ title: 'Privacy & Security' }} />
         <Stack.Screen name="payment-methods" options={{ title: 'Payment Methods' }} />
+        <Stack.Screen name="subscription" options={{ title: 'Subscription' }} />
         <Stack.Screen name="privacy-policy" options={{ title: 'Privacy Policy' }} />
         <Stack.Screen name="terms-conditions" options={{ title: 'Terms & Conditions' }} />
       </Stack>
@@ -201,7 +223,8 @@ function ThemedRootLayout() {
   });
 
   return (
-    <GestureHandlerRootView style={rootStyles.container}>
+    <StripeProvider publishableKey={STRIPE_KEY}>
+      <GestureHandlerRootView style={rootStyles.container}>
       <ErrorBoundary
         FallbackComponent={ErrorFallback}
         onError={(error: Error, errorInfo: any) => {
@@ -212,18 +235,21 @@ function ThemedRootLayout() {
         }}
       >
         <AuthProvider>
-          <VenuesProvider>
-            <CapacityProvider>
-              <TicketsProvider>
-                <ChatProvider>
-                  <RootLayoutNav />
-                </ChatProvider>
-              </TicketsProvider>
-            </CapacityProvider>
-          </VenuesProvider>
+          <SubscriptionProvider>
+            <VenuesProvider>
+              <CapacityProvider>
+                <TicketsProvider>
+                  <ChatProvider>
+                    <RootLayoutNav />
+                  </ChatProvider>
+                </TicketsProvider>
+              </CapacityProvider>
+            </VenuesProvider>
+          </SubscriptionProvider>
         </AuthProvider>
       </ErrorBoundary>
     </GestureHandlerRootView>
+    </StripeProvider>
   );
 }
 

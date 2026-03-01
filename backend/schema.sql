@@ -116,6 +116,53 @@ CREATE TABLE IF NOT EXISTS business_approval_tokens (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ── Phase 4: Stripe Payment Engine ───────────────────────────────────────────
+
+-- Add Stripe customer ID to users (idempotent)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+
+-- Saved payment methods (one row per Stripe PaymentMethod object)
+CREATE TABLE IF NOT EXISTS user_payment_methods (
+  id                       TEXT PRIMARY KEY,
+  user_id                  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  stripe_payment_method_id TEXT NOT NULL UNIQUE,
+  card_brand               TEXT,        -- visa, mastercard, amex, etc.
+  card_last4               TEXT,
+  card_exp_month           INTEGER,
+  card_exp_year            INTEGER,
+  is_default               BOOLEAN NOT NULL DEFAULT false,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS upm_user_id_idx ON user_payment_methods (user_id);
+
+-- Subscriptions (one row per user; upserted by Stripe webhook)
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id                       TEXT PRIMARY KEY,
+  user_id                  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  stripe_customer_id       TEXT,
+  stripe_subscription_id   TEXT UNIQUE,
+  stripe_payment_method_id TEXT,
+  plan                     TEXT NOT NULL
+    CHECK (plan IN ('customer_monthly', 'business_monthly')),
+  status                   TEXT NOT NULL DEFAULT 'trialing'
+    CHECK (status IN ('trialing','active','past_due','canceled','incomplete','incomplete_expired','unpaid')),
+  trial_start              TIMESTAMPTZ,
+  trial_end                TIMESTAMPTZ,
+  current_period_start     TIMESTAMPTZ,
+  current_period_end       TIMESTAMPTZ,
+  cancel_at_period_end     BOOLEAN NOT NULL DEFAULT false,
+  canceled_at              TIMESTAMPTZ,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_user_id_unique
+  ON subscriptions (user_id);
+
+CREATE INDEX IF NOT EXISTS subscriptions_stripe_sub_idx
+  ON subscriptions (stripe_subscription_id);
+
 -- Seed admin (optional if not present)
 INSERT INTO users (id, email, name, password_hash, role)
 VALUES ('admin_seed', 'admin@tipzy.app', 'Tipzy Admin', '__PENDING__', 'admin')
