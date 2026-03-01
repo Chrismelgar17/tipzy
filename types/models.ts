@@ -288,6 +288,10 @@ export interface PaymentAuditEntry {
 }
 
 export interface NotificationSettings {
+  pushNotifications: boolean;
+  emailNotifications: boolean;
+  inAppNotifications: boolean;
+}
 
 export interface PrivacySettings {
   twoFactorEnabled: boolean;
