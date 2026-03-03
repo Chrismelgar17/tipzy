@@ -126,21 +126,42 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
 
   //  Session restore 
 
+  // Race a promise against a deadline so network hangs never block startup.
+  function withTimeout<T>(promise: Promise<T>, ms: number, label = 'operation'): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`[Auth] ${label} timed out after ${ms}ms`)), ms),
+      ),
+    ]);
+  }
+
   const loadUser = async () => {
+    // Hard deadline: if session restore takes > 8 s for any reason, unblock the
+    // app immediately so the loading screen never becomes a permanent freeze.
+    let finished = false;
+    const bailout = setTimeout(() => {
+      if (!finished) {
+        console.warn('[Auth] Session restore exceeded 8 s deadline — proceeding as guest');
+        setIsLoading(false);
+      }
+    }, 8000);
+
     try {
       const hasToken = await secureStorage.isAuthenticated();
 
       if (hasToken) {
         try {
-          // Try refresh first so we always boot with a fresh access token
-          await authService.refreshTokens();
+          // Try refresh first so we always boot with a fresh access token.
+          // Cap at 5 s so a stalled Railway cold-start never freezes the app.
+          await withTimeout(authService.refreshTokens(), 5000, 'refreshTokens');
           const stored = await authService.getStoredUser();
           if (stored) {
             let mapped = toAppUser(stored);
             // Always fetch fresh profile so server-side changes (e.g. business approval,
             // email verification) are reflected immediately on app startup.
             try {
-              const fresh = await authService.getProfile();
+              const fresh = await withTimeout(authService.getProfile(), 5000, 'getProfile');
               mapped = toAppUser(fresh);
               await secureStorage.saveUserData(fresh);
             } catch {
@@ -195,6 +216,8 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
       await clearAllAppData();
       setUser(null);
     } finally {
+      finished = true;
+      clearTimeout(bailout);
       setIsLoading(false);
     }
   };
