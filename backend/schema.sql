@@ -121,6 +121,9 @@ CREATE TABLE IF NOT EXISTS business_approval_tokens (
 -- Add Stripe customer ID to users (idempotent)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
 
+-- Push notification token (idempotent)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS push_token TEXT;
+
 -- Saved payment methods (one row per Stripe PaymentMethod object)
 CREATE TABLE IF NOT EXISTS user_payment_methods (
   id                       TEXT PRIMARY KEY,

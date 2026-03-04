@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,34 +7,98 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Bell, Smartphone, Mail, MessageSquare } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { NotificationSettings } from '@/types/models';
+import {
+  loadNotificationSettings,
+  saveNotificationSettings,
+  registerForPushNotifications,
+  unregisterPushToken,
+} from '@/lib/notifications';
 
 export default function NotificationsScreen() {
   const [settings, setSettings] = useState<NotificationSettings>({
-    pushNotifications: true,
+    pushNotifications: false,
     emailNotifications: true,
     inAppNotifications: true,
   });
-
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  const handleToggle = (key: keyof NotificationSettings) => {
-    setSettings(prev => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-    setHasChanges(true);
-  };
+  useEffect(() => {
+    loadNotificationSettings()
+      .then((saved) => setSettings(saved))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  const handleSave = () => {
-    // Here you would typically save to your backend or AsyncStorage
-    Alert.alert('Success', 'Notification settings saved successfully');
-    setHasChanges(false);
-  };
+  const handleToggle = useCallback(async (key: keyof NotificationSettings) => {
+    if (key === 'pushNotifications') {
+      const newValue = !settings.pushNotifications;
+      if (newValue) {
+        // Request permission and register token
+        setSaving(true);
+        try {
+          const token = await registerForPushNotifications();
+          if (token) {
+            const updated = { ...settings, pushNotifications: true };
+            setSettings(updated);
+            await saveNotificationSettings(updated);
+            setHasChanges(false);
+          } else {
+            Alert.alert(
+              'Permission Required',
+              'To receive push notifications, please allow notifications in your device settings.',
+              [{ text: 'OK' }],
+            );
+          }
+        } catch (err: any) {
+          Alert.alert('Error', err?.message ?? 'Failed to enable push notifications');
+        } finally {
+          setSaving(false);
+        }
+      } else {
+        // Unregister token
+        setSaving(true);
+        try {
+          await unregisterPushToken();
+          const updated = { ...settings, pushNotifications: false };
+          setSettings(updated);
+          await saveNotificationSettings(updated);
+          setHasChanges(false);
+        } catch {
+          // Still update local state even if backend call fails
+          const updated = { ...settings, pushNotifications: false };
+          setSettings(updated);
+          await saveNotificationSettings(updated);
+          setHasChanges(false);
+        } finally {
+          setSaving(false);
+        }
+      }
+    } else {
+      setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+      setHasChanges(true);
+    }
+  }, [settings]);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    try {
+      await saveNotificationSettings(settings);
+      setHasChanges(false);
+      Alert.alert('Saved', 'Notification settings saved successfully');
+    } catch {
+      Alert.alert('Error', 'Failed to save settings. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }, [settings]);
 
   const notificationOptions = [
     {
@@ -67,58 +131,78 @@ export default function NotificationsScreen() {
         }}
       />
       <View style={styles.container}>
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <Bell size={32} color={theme.colors.purple} />
-            <Text style={styles.headerTitle}>Notification Preferences</Text>
-            <Text style={styles.headerDescription}>
-              Choose how you want to be notified about events, updates, and promotions.
-            </Text>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.purple} />
           </View>
+        ) : (
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            <View style={styles.header}>
+              <Bell size={32} color={theme.colors.purple} />
+              <Text style={styles.headerTitle}>Notification Preferences</Text>
+              <Text style={styles.headerDescription}>
+                Choose how you want to be notified about events, updates, and promotions.
+              </Text>
+            </View>
 
-          <View style={styles.optionsList}>
-            {notificationOptions.map((option) => {
-              const Icon = option.icon;
-              return (
-                <View key={option.key} style={styles.optionItem}>
-                  <View style={styles.optionLeft}>
-                    <View style={styles.iconContainer}>
-                      <Icon size={20} color={theme.colors.purple} />
+            <View style={styles.optionsList}>
+              {notificationOptions.map((option) => {
+                const Icon = option.icon;
+                const isDisabled = saving && option.key === 'pushNotifications';
+                return (
+                  <View key={option.key} style={styles.optionItem}>
+                    <View style={styles.optionLeft}>
+                      <View style={styles.iconContainer}>
+                        <Icon size={20} color={theme.colors.purple} />
+                      </View>
+                      <View style={styles.optionInfo}>
+                        <Text style={styles.optionTitle}>{option.title}</Text>
+                        <Text style={styles.optionDescription}>{option.description}</Text>
+                      </View>
                     </View>
-                    <View style={styles.optionInfo}>
-                      <Text style={styles.optionTitle}>{option.title}</Text>
-                      <Text style={styles.optionDescription}>{option.description}</Text>
-                    </View>
+                    {isDisabled ? (
+                      <ActivityIndicator size="small" color={theme.colors.purple} />
+                    ) : (
+                      <Switch
+                        value={settings[option.key]}
+                        onValueChange={() => handleToggle(option.key)}
+                        disabled={saving}
+                        trackColor={{
+                          false: theme.colors.border,
+                          true: theme.colors.purple + '40',
+                        }}
+                        thumbColor={settings[option.key] ? theme.colors.purple : theme.colors.text.tertiary}
+                      />
+                    )}
                   </View>
-                  <Switch
-                    value={settings[option.key]}
-                    onValueChange={() => handleToggle(option.key)}
-                    trackColor={{
-                      false: theme.colors.border,
-                      true: theme.colors.purple + '40',
-                    }}
-                    thumbColor={settings[option.key] ? theme.colors.purple : theme.colors.text.tertiary}
-                  />
-                </View>
-              );
-            })}
-          </View>
+                );
+              })}
+            </View>
 
-          <View style={styles.infoSection}>
-            <Text style={styles.infoTitle}>About Notifications</Text>
-            <Text style={styles.infoText}>
-              • Push notifications require device permissions{'\n'}
-              • Email notifications are sent to your registered email{'\n'}
-              • In-app notifications appear while using the app{'\n'}
-              • You can change these settings anytime
-            </Text>
-          </View>
-        </ScrollView>
+            <View style={styles.infoSection}>
+              <Text style={styles.infoTitle}>About Notifications</Text>
+              <Text style={styles.infoText}>
+                • Push notifications require device permissions{'\n'}
+                • Email notifications are sent to your registered email{'\n'}
+                • In-app notifications appear while using the app{'\n'}
+                • You can change these settings anytime
+              </Text>
+            </View>
+          </ScrollView>
+        )}
 
-        {hasChanges && (
+        {hasChanges && !loading && (
           <View style={styles.saveContainer}>
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-              <Text style={styles.saveButtonText}>Save Changes</Text>
+            <TouchableOpacity
+              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+              onPress={handleSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color={theme.colors.white} />
+              ) : (
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -131,6 +215,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
@@ -229,6 +318,9 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     borderRadius: theme.borderRadius.lg,
     alignItems: 'center',
+  },
+  saveButtonDisabled: {
+    opacity: 0.6,
   },
   saveButtonText: {
     color: theme.colors.white,

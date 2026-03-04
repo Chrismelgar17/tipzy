@@ -1,9 +1,9 @@
-import { Tabs, Redirect } from "expo-router";
-import { Home, Gift, Plus, ShoppingCart, Settings } from "lucide-react-native";
+import { Tabs, Redirect, router } from "expo-router";
+import { Home, Gift, Plus, ShoppingCart, Settings, ArrowLeft } from "lucide-react-native";
 import React from "react";
 import { theme } from "@/constants/theme";
 import { useAuth } from "@/hooks/auth-context";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, TouchableOpacity } from "react-native";
 
 const styles = StyleSheet.create({
   addButton: {
@@ -98,6 +98,14 @@ export default function BusinessTabLayout() {
         options={{
           href: null,
           headerTitle: "Plan & Subscription",
+          headerLeft: () => (
+            <TouchableOpacity
+              onPress={() => router.push('/(business-tabs)/settings')}
+              style={{ paddingHorizontal: 16 }}
+            >
+              <ArrowLeft size={24} color={theme.colors.text.primary} />
+            </TouchableOpacity>
+          ),
         }}
       />
       <Tabs.Screen

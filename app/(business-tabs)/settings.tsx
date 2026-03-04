@@ -53,7 +53,7 @@ export default function BusinessSettingsScreen() {
   };
 
   const handleContactUs = () => {
-    Linking.openURL('mailto:support@nightlife.com?subject=Business Support');
+    Linking.openURL('mailto:tipzy.team@gmail.com?subject=Business Support');
   };
 
   const handleRateApp = () => {
@@ -62,11 +62,11 @@ export default function BusinessSettingsScreen() {
   };
 
   const handleTerms = () => {
-    Linking.openURL('https://nightlife.com/terms');
+    router.push('/terms-conditions' as any);
   };
 
   const handlePrivacy = () => {
-    Linking.openURL('https://nightlife.com/privacy');
+    router.push('/privacy-policy' as any);
   };
 
   const handleBusinessProfile = () => {

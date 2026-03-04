@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   TextInput,
   Platform,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Users, MapPin, Star, Clock, Search } from 'lucide-react-native';
@@ -43,8 +44,9 @@ export default function HomeScreen() {
   const { showSignInModal, setShowSignInModal, signInPrompt } = useAuth();
   const [selectedSort, setSelectedSort] = useState<SortOption>('nearby');
 
-  const { venues, isLoading: venuesLoading } = useVenues();
+  const { venues, isLoading: venuesLoading, refresh: refreshVenues } = useVenues();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [offers, setOffers] = useState<ApiOffer[]>([]);
 
@@ -209,6 +211,18 @@ export default function HomeScreen() {
     }
   };
 
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        refreshVenues(),
+        api.get('/venues/offers').then(res => setOffers(res.data?.offers ?? [])).catch(() => {}),
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshVenues]);
+
   return (
     <View style={styles.container}>
       {/* Fixed Header */}
@@ -258,6 +272,14 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.colors.purple}
+            colors={[theme.colors.purple]}
+          />
+        }
       >
         {/* Loading indicator while fetching real venues */}
         {venuesLoading && (
@@ -267,129 +289,138 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Featured Offers Section */}
-        {offers.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Featured Offers</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.offersContainer}
-            >
-              {offers.map((offer) => (
-                <OfferCard
-                  key={offer.id}
-                  offer={offer as any}
-                  onPress={() => handleOfferPress(offer.id)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Featured on Tipzy Section */}
-        {getFeaturedVenues().length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Featured on Tipzy</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.venuesContainer}
-            >
-              {getFeaturedVenues().map((venue) => (
-                <SquareVenueCard
-                  key={venue.id}
-                  venue={venue}
-                  onPress={() => handleVenuePress(venue.id)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Places You'll Like Section */}
-        {getPlacesYoullLike().length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Places You&apos;ll Like</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.venuesContainer}
-            >
-              {getPlacesYoullLike().map((venue) => (
-                <SquareVenueCard
-                  key={venue.id}
-                  venue={venue}
-                  onPress={() => handleVenuePress(venue.id)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Most Viewed Section */}
-        {getMostViewed().length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Most Viewed</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.venuesContainer}
-            >
-              {getMostViewed().map((venue) => (
-                <SquareVenueCard
-                  key={venue.id}
-                  venue={venue}
-                  onPress={() => handleVenuePress(venue.id)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Recently Viewed Section */}
-        {getRecentlyViewed().length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recently Viewed</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.venuesContainer}
-            >
-              {getRecentlyViewed().map((venue) => (
-                <SquareVenueCard
-                  key={venue.id}
-                  venue={venue}
-                  onPress={() => handleVenuePress(venue.id)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* All Venues (Filtered/Sorted) Section */}
-        {(searchQuery.trim() || selectedSort !== 'nearby') && (
+        {/* ── SEARCH / FILTER RESULTS ── replaces all sections when active */}
+        {searchQuery.trim() || selectedSort !== 'nearby' ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
-              {searchQuery.trim() ? 'Search Results' : 
-               selectedSort === 'busiest' ? 'Busiest Right Now' :
-               selectedSort === 'top-rated' ? 'Top Rated' :
-               selectedSort === 'open-now' ? 'Open Now' : 'All Venues'}
+              {searchQuery.trim()
+                ? getSortedVenues().length === 0
+                  ? 'No results found'
+                  : `${getSortedVenues().length} result${getSortedVenues().length === 1 ? '' : 's'} for "${searchQuery}"`
+                : selectedSort === 'busiest' ? 'Busiest Right Now'
+                : selectedSort === 'top-rated' ? 'Top Rated'
+                : selectedSort === 'open-now' ? 'Open Now'
+                : 'All Venues'}
             </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.venuesContainer}
-            >
-              {getSortedVenues().map((venue) => (
-                <SquareVenueCard
-                  key={venue.id}
-                  venue={venue}
-                  onPress={() => handleVenuePress(venue.id)}
-                />
-              ))}
-            </ScrollView>
+            {getSortedVenues().length === 0 ? (
+              <Text style={styles.noResultsText}>
+                {searchQuery.trim() ? 'Try a different name or genre.' : 'No venues found for this filter.'}
+              </Text>
+            ) : (
+              <View style={styles.searchGrid}>
+                {getSortedVenues().map((venue) => (
+                  <View key={venue.id} style={styles.searchGridItem}>
+                    <SquareVenueCard
+                      venue={venue}
+                      onPress={() => handleVenuePress(venue.id)}
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
+        ) : (
+          <>
+            {/* Featured Offers Section */}
+            {offers.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Featured Offers</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.offersContainer}
+                >
+                  {offers.map((offer) => (
+                    <OfferCard
+                      key={offer.id}
+                      offer={offer as any}
+                      onPress={() => handleOfferPress(offer.id)}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Featured on Tipzy Section */}
+            {getFeaturedVenues().length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Featured on Tipzy</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.venuesContainer}
+                >
+                  {getFeaturedVenues().map((venue) => (
+                    <SquareVenueCard
+                      key={venue.id}
+                      venue={venue}
+                      onPress={() => handleVenuePress(venue.id)}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Places You'll Like Section */}
+            {getPlacesYoullLike().length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Places You&apos;ll Like</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.venuesContainer}
+                >
+                  {getPlacesYoullLike().map((venue) => (
+                    <SquareVenueCard
+                      key={venue.id}
+                      venue={venue}
+                      onPress={() => handleVenuePress(venue.id)}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Most Viewed Section */}
+            {getMostViewed().length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Most Viewed</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.venuesContainer}
+                >
+                  {getMostViewed().map((venue) => (
+                    <SquareVenueCard
+                      key={venue.id}
+                      venue={venue}
+                      onPress={() => handleVenuePress(venue.id)}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Recently Viewed Section */}
+            {getRecentlyViewed().length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Recently Viewed</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.venuesContainer}
+                >
+                  {getRecentlyViewed().map((venue) => (
+                    <SquareVenueCard
+                      key={venue.id}
+                      venue={venue}
+                      onPress={() => handleVenuePress(venue.id)}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </>
         )}
 
         {/* Business Registration Link */}
@@ -509,6 +540,21 @@ const styles = StyleSheet.create({
   },
   venuesContainer: {
     paddingHorizontal: 16,
+  },
+  searchGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  searchGridItem: {
+    width: '47%',
+  },
+  noResultsText: {
+    color: theme.colors.text.secondary,
+    fontSize: 14,
+    marginHorizontal: 16,
+    marginTop: 8,
   },
   businessLinkContainer: {
     alignItems: 'center',

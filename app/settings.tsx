@@ -283,7 +283,7 @@ export default function SettingsScreen() {
               <Text style={styles.contactInfo}>
                 If you need additional help, you can reach our support team:
               </Text>
-              <Text style={styles.contactDetail}>📧 support@tipzy.app</Text>
+              <Text style={styles.contactDetail}>📧 tipzy.team@gmail.com</Text>
               <Text style={styles.contactDetail}>📞 1-800-NIGHTLIFE</Text>
               <Text style={styles.contactDetail}>🕒 Mon-Fri, 9 AM - 6 PM EST</Text>
             </View>

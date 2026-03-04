@@ -488,4 +488,22 @@ customer.delete("/account", requireAuth, async (c) => {
   return c.json({ message: "Account deleted successfully" });
 });
 
+// Save push notification token
+customer.post("/push-token", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  let body: { token?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+  const { token } = body;
+  if (!token) return c.json({ error: "token is required" }, 400);
+  await query("UPDATE users SET push_token = $1 WHERE id = $2", [token, userId]);
+  return c.json({ message: "Push token saved" });
+});
+
+// Remove push notification token
+customer.delete("/push-token", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  await query("UPDATE users SET push_token = NULL WHERE id = $1", [userId]);
+  return c.json({ message: "Push token removed" });
+});
+
 export default customer;

@@ -9,9 +9,10 @@ import {
   Switch,
   Alert,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { Shield, Lock, Eye, EyeOff, Trash2, Database } from 'lucide-react-native';
+import { Shield, Lock, Eye, EyeOff, Trash2, Database, ChevronRight } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { PrivacySettings } from '@/types/models';
 import { useAuth } from '@/hooks/auth-context';
@@ -25,6 +26,7 @@ export default function PrivacySecurityScreen() {
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
@@ -43,7 +45,7 @@ export default function PrivacySecurityScreen() {
     }));
   };
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
       Alert.alert('Error', 'Please fill in all password fields');
       return;
@@ -59,13 +61,17 @@ export default function PrivacySecurityScreen() {
       return;
     }
 
-    changePassword(passwordForm.currentPassword, passwordForm.newPassword)
-      .then(() => {
-        Alert.alert('Success', 'Password changed successfully');
-        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-        setShowPasswordModal(false);
-      })
-      .catch((err: any) => Alert.alert('Error', err?.message ?? 'Failed to change password'));
+    setChangingPassword(true);
+    try {
+      await changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      Alert.alert('Success', 'Password changed successfully');
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setShowPasswordModal(false);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Failed to change password');
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   const handleDeleteAccount = () => {
@@ -118,6 +124,7 @@ export default function PrivacySecurityScreen() {
           <TouchableOpacity
             style={styles.optionItem}
             onPress={() => setShowPasswordModal(true)}
+            activeOpacity={0.7}
           >
             <View style={styles.optionLeft}>
               <View style={styles.iconContainer}>
@@ -128,6 +135,7 @@ export default function PrivacySecurityScreen() {
                 <Text style={styles.optionDescription}>Update your account password</Text>
               </View>
             </View>
+            <ChevronRight size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
 
           <View style={styles.optionItem}>
@@ -216,8 +224,10 @@ export default function PrivacySecurityScreen() {
               <Text style={styles.cancelButton}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Change Password</Text>
-            <TouchableOpacity onPress={handleChangePassword}>
-              <Text style={styles.saveButton}>Save</Text>
+            <TouchableOpacity onPress={handleChangePassword} disabled={changingPassword}>
+              {changingPassword
+                ? <ActivityIndicator size="small" color={theme.colors.purple} />
+                : <Text style={styles.saveButton}>Save</Text>}
             </TouchableOpacity>
           </View>
           
@@ -230,7 +240,9 @@ export default function PrivacySecurityScreen() {
                   value={passwordForm.currentPassword}
                   onChangeText={(text) => setPasswordForm({ ...passwordForm, currentPassword: text })}
                   placeholder="Enter current password"
+                  placeholderTextColor={theme.colors.text.tertiary}
                   secureTextEntry={!showPasswords.current}
+                  autoCapitalize="none"
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -253,7 +265,9 @@ export default function PrivacySecurityScreen() {
                   value={passwordForm.newPassword}
                   onChangeText={(text) => setPasswordForm({ ...passwordForm, newPassword: text })}
                   placeholder="Enter new password"
+                  placeholderTextColor={theme.colors.text.tertiary}
                   secureTextEntry={!showPasswords.new}
+                  autoCapitalize="none"
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -276,7 +290,9 @@ export default function PrivacySecurityScreen() {
                   value={passwordForm.confirmPassword}
                   onChangeText={(text) => setPasswordForm({ ...passwordForm, confirmPassword: text })}
                   placeholder="Confirm new password"
+                  placeholderTextColor={theme.colors.text.tertiary}
                   secureTextEntry={!showPasswords.confirm}
+                  autoCapitalize="none"
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}

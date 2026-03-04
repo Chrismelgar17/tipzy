@@ -339,8 +339,11 @@ business.get("/venues", requireAuth, requireRole("business", "admin"), async (c)
     id: string; name: string; status: string;
     current_count: number; capacity: number; address: string;
     lat: number | null; lng: number | null; updated_at: string;
+    hours: Record<string, { open: string; close: string }>;
+    genres: string[];
+    photos: string[];
   }>(
-    `SELECT id, name, status, current_count, capacity, address, lat, lng, updated_at
+    `SELECT id, name, status, current_count, capacity, address, lat, lng, updated_at, hours, genres, photos
      FROM venues ${whereClause} ORDER BY created_at DESC`,
     params,
   );
@@ -355,6 +358,9 @@ business.get("/venues", requireAuth, requireRole("business", "admin"), async (c)
       currentCount: v.current_count, maxCapacity: v.capacity,
       occupancyPct: pct, crowdLevel: level, crowdColor: color,
       updatedAt: v.updated_at,
+      hours: v.hours ?? {},
+      genres: v.genres ?? [],
+      photos: v.photos ?? [],
     };
   });
 

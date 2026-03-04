@@ -2,7 +2,7 @@
  * Business Subscription Tab
  *
  * States:
- *  • No plan         → hype copy + 2 plan cards (Monthly $100 | Yearly $1000)
+ *  • No plan         → hype copy + 2 plan cards (Monthly $99 | Yearly $999)
  *                      both with 30-day free trial
  *  • Trialing        → trial banner, feature list, days remaining, cancel
  *  • Active          → plan badge, feature list, renewal date, cancel
@@ -48,28 +48,28 @@ const BUSINESS_PLANS = [
   {
     key: 'business_monthly' as const,
     brand: '🔥 Starter Monthly',
-    tagline: 'Drop in when you need it',
-    price: '$100',
+    tagline: 'Most popular · no long-term commitment',
+    price: '$99',
     period: '/month',
-    yearlyEquiv: '$1,200/yr',
+    yearlyEquiv: '$1,188/yr',
     trialLabel: '30-day free trial',
     trialDays: 30,
     color: '#6C5CE7',
     gradientColors: ['#6C5CE7', '#4834D4'] as const,
-    badge: null,
+    badge: 'MOST POPULAR',
   },
   {
     key: 'business_yearly' as const,
     brand: '⚡ Starter Yearly',
-    tagline: 'Best value — save $200',
-    price: '$1,000',
+    tagline: 'Best value — save $189 a year',
+    price: '$999',
     period: '/year',
     yearlyEquiv: '~$83/mo',
     trialLabel: '30-day free trial',
     trialDays: 30,
     color: '#00D1FF',
     gradientColors: ['#00D1FF', '#0099BB'] as const,
-    badge: 'BEST DEAL',
+    badge: 'BEST DEAL · SAVE 16%',
   },
 ];
 
@@ -344,7 +344,10 @@ export default function BusinessSubscriptionScreen() {
                   </Text>
                 </View>
                 {plan.key === 'business_yearly' && (
-                  <Text style={s.savingNote}>≈ {plan.yearlyEquiv} — save $200 vs monthly</Text>
+                  <Text style={s.savingNote}>≈ {plan.yearlyEquiv} — you save $189 vs monthly 🎉</Text>
+                )}
+                {plan.key === 'business_monthly' && (
+                  <Text style={s.savingNote}>Switch to yearly anytime and save 16%</Text>
                 )}
 
                 <TouchableOpacity
@@ -355,7 +358,11 @@ export default function BusinessSubscriptionScreen() {
                 >
                   {startingPlan === plan.key
                     ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={s.ctaBtnLabel}>Start Free Trial →</Text>
+                    : <Text style={s.ctaBtnLabel}>
+                        {plan.key === 'business_yearly'
+                          ? 'Lock In Best Price — Free 30 Days →'
+                          : 'Claim My Free Month →'}
+                      </Text>
                   }
                 </TouchableOpacity>
               </LinearGradient>

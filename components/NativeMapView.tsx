@@ -110,7 +110,7 @@ function UserLocationMarker() {
         <Image
           source={require('../assets/images/icon.png')}
           style={styles.userLocationIcon}
-          resizeMode="contain"
+          resizeMode="cover"
         />
       </View>
     </View>
@@ -225,13 +225,15 @@ function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocatio
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        customMapStyle={mapStyle}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        customMapStyle={Platform.OS === 'android' ? mapStyle : undefined}
+        userInterfaceStyle={Platform.OS === 'ios' ? 'dark' : undefined}
         initialRegion={initialRegion}
         showsUserLocation={false}
         showsCompass
         showsZoomControls={Platform.OS === 'android'}
         rotateEnabled={false}
+        minZoomLevel={8}
       >
         {/* Custom user location marker */}
         {userLocation && (
@@ -364,10 +366,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.7,
     shadowRadius: 10,
     elevation: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   userLocationIcon: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   recenterButton: {
     position: 'absolute',

@@ -9,6 +9,7 @@ import {
   Image,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
 import { ArrowLeft, Plus, X } from 'lucide-react-native';
+import { uploadImageToCloud, isLocalUri } from '@/lib/upload';
 
 const MIN_PHOTOS = 2;
 const MAX_PHOTOS = 5;
@@ -39,6 +41,8 @@ export default function BusinessGalleryScreen() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
   const [selectedImages, setSelectedImages] = useState<GalleryImage[]>([]);
+
+  const [isUploading, setIsUploading] = useState(false);
 
   if (!isLoading && !isAuthenticated) {
     router.replace('/(auth)/signin' as any);
@@ -88,14 +92,30 @@ export default function BusinessGalleryScreen() {
 
   const handleContinue = async () => {
     if (!canContinue) return;
+    setIsUploading(true);
     try {
+      // Upload any own (local) images to cloud, keep sample URLs as-is
+      const resolvedImages = await Promise.all(
+        selectedImages.map(async (img) => {
+          if (img.isOwn && isLocalUri(img.uri)) {
+            const cloudUrl = await uploadImageToCloud(img.uri);
+            return cloudUrl;
+          }
+          return img.uri;
+        })
+      );
       const raw = await AsyncStorage.getItem('businessProfile');
       const profile = raw ? JSON.parse(raw) : {};
       await AsyncStorage.setItem(
         'businessProfile',
-        JSON.stringify({ ...profile, galleryImages: selectedImages.map(img => img.uri) })
+        JSON.stringify({ ...profile, galleryImages: resolvedImages })
       );
-    } catch {}
+    } catch (err: any) {
+      Alert.alert('Upload Failed', err?.message ?? 'Could not upload image. Please try again.');
+      setIsUploading(false);
+      return;
+    }
+    setIsUploading(false);
     router.push('/onboarding/business-hours' as any);
   };
 
@@ -370,13 +390,17 @@ export default function BusinessGalleryScreen() {
           <TouchableOpacity
             style={[
               styles.continueButton,
-              !canContinue && styles.continueButtonDisabled
+              (!canContinue || isUploading) && styles.continueButtonDisabled
             ]}
             onPress={handleContinue}
-            disabled={!canContinue}
+            disabled={!canContinue || isUploading}
             testID="continue-button"
           >
-            <Text style={styles.continueButtonText}>Continue</Text>
+            {isUploading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.continueButtonText}>Continue</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>

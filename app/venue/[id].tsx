@@ -10,6 +10,7 @@ import {
   SafeAreaView,
   Platform,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -112,6 +113,20 @@ export default function VenueDetailScreen() {
     toggleFavorite(venue.id);
   };
 
+  const handleShare = async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      await Share.share({
+        title: venue.name,
+        message: `Check out ${venue.name} on Tipzy!\n${venue.address ?? ''}`.trim(),
+      });
+    } catch {
+      // User dismissed share sheet
+    }
+  };
+
   const getCrowdColor = () => {
     const color = venue.crowdColor ?? crowdColorFromLevel(venue.crowdLevel ?? 'quiet');
     if (color === 'red')    return theme.colors.error;
@@ -146,7 +161,7 @@ export default function VenueDetailScreen() {
                   fill={isFavorite ? theme.colors.error : 'transparent'}
                 />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton}>
+              <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
                 <Share2 size={24} color={theme.colors.white} />
               </TouchableOpacity>
             </View>

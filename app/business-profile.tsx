@@ -28,6 +28,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeJsonParse, clearCorruptedData } from '@/utils/storage';
 import LocationPickerMap, { PickedLocation } from '@/components/LocationPickerMap';
 import api from '@/lib/api';
+import { uploadImageToCloud, isLocalUri } from '@/lib/upload';
 
 interface FormData {
   businessName: string;
@@ -130,13 +131,24 @@ export default function BusinessProfileScreen() {
       console.error('Failed to load business profile:', error);
     }
 
-    // Load authoritative venue location from the backend
+    // Load authoritative venue data from the backend
     try {
-      const res = await api.get<{ venues: Array<{ id: string; address: string; lat: number | null; lng: number | null }> }>('/business/venues');
+      const res = await api.get<{ venues: Array<{
+        id: string;
+        name: string;
+        address: string;
+        lat: number | null;
+        lng: number | null;
+        maxCapacity: number;
+        hours: Record<string, { open: string; close: string }>;
+        genres: string[];
+        photos: string[];
+      }> }>('/business/venues');
       if (res.data.venues.length > 0) {
         const venue = res.data.venues[0];
         setVenueId(venue.id);
-        // Always sync address from backend; treat null/0 as "no coords yet"
+
+        // Sync address from backend
         if (venue.address) {
           setPickedLocation({
             address: venue.address,
@@ -144,6 +156,43 @@ export default function BusinessProfileScreen() {
             lng: venue.lng ?? 0,
           });
         }
+
+        // Convert backend hours format (mon/tue…) to form workHours format
+        const abbrevToFull: Record<string, keyof WorkHours> = {
+          mon: 'monday', tue: 'tuesday', wed: 'wednesday', thu: 'thursday',
+          fri: 'friday', sat: 'saturday', sun: 'sunday',
+        };
+        const defaultHours: WorkHours = {
+          monday:    { isOpen: true,  openTime: '09:00', closeTime: '22:00' },
+          tuesday:   { isOpen: true,  openTime: '09:00', closeTime: '22:00' },
+          wednesday: { isOpen: true,  openTime: '09:00', closeTime: '22:00' },
+          thursday:  { isOpen: true,  openTime: '09:00', closeTime: '22:00' },
+          friday:    { isOpen: true,  openTime: '09:00', closeTime: '02:00' },
+          saturday:  { isOpen: true,  openTime: '09:00', closeTime: '02:00' },
+          sunday:    { isOpen: false, openTime: '09:00', closeTime: '22:00' },
+        };
+        let workHoursFromBackend: WorkHours = { ...defaultHours };
+        if (venue.hours && Object.keys(venue.hours).length > 0) {
+          // Mark all days closed first, then open only those in DB
+          const allDays: (keyof WorkHours)[] = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+          allDays.forEach(d => { workHoursFromBackend[d] = { ...defaultHours[d], isOpen: false }; });
+          Object.entries(venue.hours).forEach(([abbrev, times]) => {
+            const fullDay = abbrevToFull[abbrev];
+            if (fullDay) {
+              workHoursFromBackend[fullDay] = { isOpen: true, openTime: times.open, closeTime: times.close };
+            }
+          });
+        }
+
+        // Merge: backend wins for fields it owns; keep local values for phone/website/category/description
+        setFormData(prev => ({
+          ...prev,
+          businessName: venue.name || prev.businessName,
+          maxCapacity: venue.maxCapacity > 0 ? venue.maxCapacity.toString() : prev.maxCapacity,
+          services: venue.genres.length > 0 ? venue.genres.join(', ') : prev.services,
+          galleryImages: venue.photos.length > 0 ? venue.photos : prev.galleryImages,
+          workHours: Object.keys(venue.hours ?? {}).length > 0 ? workHoursFromBackend : prev.workHours,
+        }));
       }
     } catch {
       // offline or not authenticated – keep AsyncStorage data
@@ -253,8 +302,18 @@ export default function BusinessProfileScreen() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      const newImages = [...formData.galleryImages, result.assets[0].uri];
-      setFormData(prev => ({ ...prev, galleryImages: newImages }));
+      const localUri = result.assets[0].uri;
+      setIsLoading(true);
+      try {
+        const cloudUrl = isLocalUri(localUri)
+          ? await uploadImageToCloud(localUri)
+          : localUri;
+        setFormData(prev => ({ ...prev, galleryImages: [...prev.galleryImages, cloudUrl] }));
+      } catch (err: any) {
+        Alert.alert('Upload Failed', err?.message ?? 'Could not upload image. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
