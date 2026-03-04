@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,9 @@ import { Venue } from '@/types/models';
 import { useAuth } from '@/hooks/auth-context';
 import { useVenues } from '@/hooks/venues-context';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const LOCATION_CACHE_KEY = 'user_last_location';
 
 // Import NativeMapView - Metro will automatically choose the right platform file
 import NativeMapView from '@/components/NativeMapView';
@@ -34,14 +37,39 @@ export default function MapScreen() {
   const [showInfoCard, setShowInfoCard] = useState<boolean>(false);
   const [favorites, setFavorites] = useState<string[]>(user?.favorites || []);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const watchRef = useRef<Location.LocationSubscription | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     (async () => {
+      // Restore cached location immediately so map shows on reopen
+      try {
+        const cached = await AsyncStorage.getItem(LOCATION_CACHE_KEY);
+        if (cached && mounted) {
+          setUserLocation(JSON.parse(cached));
+        }
+      } catch {}
+
+      // Request permission and start watching for live location
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      if (status !== 'granted' || !mounted) return;
+
+      watchRef.current = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, distanceInterval: 10 },
+        (loc) => {
+          const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+          if (mounted) setUserLocation(coords);
+          AsyncStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(coords)).catch(() => {});
+        },
+      );
     })();
+
+    return () => {
+      mounted = false;
+      watchRef.current?.remove();
+      watchRef.current = null;
+    };
   }, []);
 
   const handleMarkerPress = (venue: Venue) => {

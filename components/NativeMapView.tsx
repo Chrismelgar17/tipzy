@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useRef, useState, Component } from 'react';
-import { View, Text, StyleSheet, Platform, Animated, Easing, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Platform, Animated, Easing, TouchableOpacity } from 'react-native';
 import { MapPin } from 'lucide-react-native';
 
 // Error boundary so a native map crash doesn't take down the whole app
@@ -98,20 +98,18 @@ function UserLocationMarker() {
 
   return (
     <View style={styles.userLocationWrapper}>
-      {/* Pulsing neon ring */}
+      {/* Outer pulsing ring */}
       <Animated.View
         style={[
           styles.userLocationRing,
           { transform: [{ scale: ringScale }], opacity: ringOpacity },
         ]}
       />
-      {/* App logo clipped to circle — dark background so neon martini glass shows correctly */}
-      <View style={styles.userLocationDot}>
-        <Image
-          source={require('../assets/images/icon.png')}
-          style={styles.userLocationIcon}
-          resizeMode="cover"
-        />
+      {/* Solid neon dot — no image so no white corners */}
+      <View style={styles.userLocationDotShadow}>
+        <View style={styles.userLocationDot}>
+          <View style={styles.userLocationInner} />
+        </View>
       </View>
     </View>
   );
@@ -346,33 +344,37 @@ const styles = StyleSheet.create({
   },
   userLocationRing: {
     position: 'absolute',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(168, 85, 247, 0.15)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(168, 85, 247, 0.12)',
     borderWidth: 1.5,
     borderColor: 'rgba(168, 85, 247, 0.5)',
   },
-  userLocationDot: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    overflow: 'hidden',
-    backgroundColor: '#0B0B0F',
-    borderWidth: 2,
-    borderColor: 'rgba(168, 85, 247, 0.85)',
+  userLocationDotShadow: {
+    // Shadow wrapper — separate from overflow:hidden so iOS doesn't clip the glow
     shadowColor: '#a855f7',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 10,
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
     elevation: 8,
+  },
+  userLocationDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#a855f7',
+    overflow: 'hidden',
+    borderWidth: 2.5,
+    borderColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  userLocationIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  userLocationInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.7)',
   },
   recenterButton: {
     position: 'absolute',
