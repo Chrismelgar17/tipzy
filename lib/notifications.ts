@@ -1,5 +1,4 @@
 import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from './api';
@@ -45,8 +44,8 @@ export async function saveNotificationSettings(settings: NotificationSettings): 
 
 /** Request push notification permission and register push token with backend */
 export async function registerForPushNotifications(): Promise<string | null> {
-  if (!Device.isDevice) {
-    console.log('[Notifications] Push notifications only work on real devices');
+  if (Platform.OS === 'web') {
+    console.log('[Notifications] Push notifications not supported on web');
     return null;
   }
 
