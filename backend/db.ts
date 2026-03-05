@@ -39,6 +39,7 @@ export interface DbVenue {
   photos: string; // JSON string
   price_level: number;
   rating: number | null;
+  description: string | null;
   status: "pending" | "approved" | "rejected";
   featured_rank: number;
   created_at: string;

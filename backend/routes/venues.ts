@@ -41,6 +41,7 @@ function rowToVenue(v: DbVenue) {
     photos: typeof v.photos === "string" ? JSON.parse(v.photos) : v.photos,
     priceLevel: v.price_level,
     rating: v.rating,
+    description: v.description ?? null,
     status: v.status,
     createdAt: v.created_at,
     featuredRank: v.featured_rank ?? 0,
@@ -270,6 +271,7 @@ venues.patch("/:id", requireAuth, async (c) => {
     photos?: string[];
     priceLevel?: number;
     rating?: number;
+    description?: string;
   };
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
 
@@ -296,6 +298,7 @@ venues.patch("/:id", requireAuth, async (c) => {
   if (body.photos !== undefined) addField("photos", JSON.stringify(body.photos));
   if (body.priceLevel !== undefined) addField("price_level", body.priceLevel);
   if (body.rating !== undefined) addField("rating", body.rating);
+  if (body.description !== undefined) addField("description", body.description);
 
   if (!fields.length) return c.json({ error: "No fields to update" }, 400);
   fields.push(`updated_at = now()`);

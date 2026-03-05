@@ -13,8 +13,6 @@ import {
 import { useTheme } from '@/hooks/theme-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
-  DollarSign, 
-  TrendingUp, 
   Eye, 
   BarChart3,
   Calendar,
@@ -33,7 +31,7 @@ import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
-type ChartType = 'sales' | 'income' | 'views';
+type ChartType = 'views';
 
 const FALLBACK_CHART = [
   { label: 'Mon', value: 450 },
@@ -50,7 +48,7 @@ export default function BusinessDashboard() {
   const { user } = useAuth();
   const { capacity, isLoading, isUpdating, isPolling, lastUpdated, checkIn, checkOut, setVenueId, error, refresh } = useCapacity();
 
-  const [selectedChart, setSelectedChart] = useState<ChartType>('sales');
+  const [selectedChart, setSelectedChart] = useState<ChartType>('views');
   const [stats, setStats] = useState<BusinessDashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [venueIdResolved, setVenueIdResolved] = useState<string | null>(null);
@@ -106,16 +104,9 @@ export default function BusinessDashboard() {
   };
 
   const getChartData = () => {
-    if (selectedChart === 'views') {
-      const chart = (stats as any)?.weeklyViewsChart;
-      if (chart && chart.length > 0) return chart;
-      return FALLBACK_CHART.map((item: any) => ({ ...item, value: 0 }));
-    }
-    const base = FALLBACK_CHART;
-    switch (selectedChart) {
-      case 'income': return base.map((item: any) => ({ ...item, value: item.value * 2.5 }));
-      default:       return base;
-    }
+    const chart = (stats as any)?.weeklyViewsChart;
+    if (chart && chart.length > 0) return chart;
+    return FALLBACK_CHART.map((item: any) => ({ ...item, value: 0 }));
   };
 
   const maxValue = Math.max(...getChartData().map(item => item.value));
@@ -461,83 +452,25 @@ export default function BusinessDashboard() {
 
           {/* â”€â”€ Summary cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <View style={styles.summaryContainer}>
-            <TouchableOpacity style={styles.summaryCard}>
-              <LinearGradient
-                colors={[theme.colors.purple, theme.colors.purpleLight]}
-                style={styles.summaryGradient}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              >
-                <View style={styles.summaryIcon}>
-                  <DollarSign size={24} color={theme.colors.white} />
-                </View>
-                <Text style={styles.summaryValue}>
-                  {statsLoading ? '–' : stats?.weeklySales ?? 0}
-                </Text>
-                <Text style={styles.summaryLabel}>Weekly{'\n'}Sales</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.summaryCard}>
-              <LinearGradient
-                colors={[theme.colors.cyan, theme.colors.cyanLight]}
-                style={styles.summaryGradient}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              >
-                <View style={styles.summaryIcon}>
-                  <TrendingUp size={24} color={theme.colors.white} />
-                </View>
-                <Text style={styles.summaryValue}>
-                  ${statsLoading ? '–' : stats?.weeklyRevenue ?? 0}
-                </Text>
-                <Text style={styles.summaryLabel}>Weekly{'\n'}Income</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.summaryCard}>
+            <TouchableOpacity style={[styles.summaryCard, { flex: 0, width: '100%' }]}>
               <LinearGradient
                 colors={[theme.colors.success, '#4ECDC4']}
-                style={styles.summaryGradient}
+                style={[styles.summaryGradient, { flexDirection: 'row', gap: 16, justifyContent: 'center', minHeight: 80 }]}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               >
                 <View style={styles.summaryIcon}>
-                  <Eye size={24} color={theme.colors.white} />
+                  <Eye size={28} color={theme.colors.white} />
                 </View>
-                <Text style={styles.summaryValue}>
-                  {statsLoading ? '–' : stats?.weeklyViews ?? 0}
-                </Text>
-                <Text style={styles.summaryLabel}>Weekly{'\n'}Views</Text>
+                <View style={{ justifyContent: 'center' }}>
+                  <Text style={[styles.summaryValue, { fontSize: 28 }]}>
+                    {statsLoading ? '–' : stats?.weeklyViews ?? 0}
+                  </Text>
+                  <Text style={styles.summaryLabel}>Weekly Views</Text>
+                </View>
               </LinearGradient>
             </TouchableOpacity>
           </View>
 
-          {/* â”€â”€ Today's stats row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>
-                {statsLoading ? 'â€“' : stats?.totalOrdersToday ?? 0}
-              </Text>
-              <Text style={styles.statLabel}>Orders Today</Text>
-              {(stats?.pendingOrders ?? 0) > 0 && (
-                <View style={styles.pendingBadge}>
-                  <Text style={styles.pendingBadgeText}>{stats!.pendingOrders} pending</Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>
-                ${statsLoading ? 'â€“' : (stats?.revenueToday ?? 0).toFixed(0)}
-              </Text>
-              <Text style={styles.statLabel}>Revenue Today</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statValue}>
-                {statsLoading ? 'â€“' : stats?.acceptedOrders ?? 0}
-              </Text>
-              <Text style={styles.statLabel}>Accepted</Text>
-            </View>
-          </View>
-
-          {/* â”€â”€ Live Capacity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <View style={styles.capacitySection}>
             <View style={styles.capacityHeader}>
               <View style={styles.capacityTitleRow}>
@@ -631,21 +564,7 @@ export default function BusinessDashboard() {
           {/* â”€â”€ Analytics chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <View style={styles.chartSection}>
             <View style={styles.chartHeader}>
-              <Text style={styles.chartTitle}>Analytics</Text>
-              <View style={styles.chartToggle}>
-                {(['sales', 'income', 'views'] as ChartType[]).map(type => (
-                  <TouchableOpacity
-                    key={type}
-                    style={[styles.toggleButton, selectedChart === type && styles.toggleButtonActive]}
-                    onPress={() => { setSelectedChart(type); setSelectedBar(null); }}
-                    testID={`${type}-toggle`}
-                  >
-                    <Text style={[styles.toggleText, selectedChart === type && styles.toggleTextActive]}>
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <Text style={styles.chartTitle}>Weekly Views</Text>
             </View>
 
             <View style={styles.chartContainer}>
@@ -704,9 +623,9 @@ export default function BusinessDashboard() {
                 <Text style={styles.actionText}>View Customers</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.actionButton} testID="analytics-action" onPress={() => { setSelectedChart('views'); setSelectedBar(null); }}>
+              <TouchableOpacity style={styles.actionButton} testID="analytics-action" onPress={() => { setSelectedBar(null); }}>
                 <View style={styles.actionIcon}>
-                  <TrendingUp size={24} color={theme.colors.warning} />
+                  <Eye size={24} color={theme.colors.warning} />
                 </View>
                 <Text style={styles.actionText}>Analytics</Text>
               </TouchableOpacity>

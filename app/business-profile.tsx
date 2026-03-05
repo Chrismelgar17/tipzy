@@ -143,6 +143,7 @@ export default function BusinessProfileScreen() {
         hours: Record<string, { open: string; close: string }>;
         genres: string[];
         photos: string[];
+        description: string | null;
       }> }>('/business/venues');
       if (res.data.venues.length > 0) {
         const venue = res.data.venues[0];
@@ -184,7 +185,7 @@ export default function BusinessProfileScreen() {
           });
         }
 
-        // Merge: backend wins for fields it owns; keep local values for phone/website/category/description
+        // Merge: backend wins for fields it owns; keep local values for website only
         setFormData(prev => ({
           ...prev,
           businessName: venue.name || prev.businessName,
@@ -192,10 +193,23 @@ export default function BusinessProfileScreen() {
           services: venue.genres.length > 0 ? venue.genres.join(', ') : prev.services,
           galleryImages: venue.photos.length > 0 ? venue.photos : prev.galleryImages,
           workHours: Object.keys(venue.hours ?? {}).length > 0 ? workHoursFromBackend : prev.workHours,
+          description: venue.description ?? prev.description,
         }));
       }
     } catch {
       // offline or not authenticated – keep AsyncStorage data
+    }
+
+    // Load phone and category from /business/me
+    try {
+      const meRes = await api.get<{ phone: string | null; businessCategory: string | null }>('/business/me');
+      setFormData(prev => ({
+        ...prev,
+        phone: meRes.data.phone ?? prev.phone,
+        category: meRes.data.businessCategory ?? prev.category,
+      }));
+    } catch {
+      // keep local values
     }
   };
 
@@ -264,10 +278,22 @@ export default function BusinessProfileScreen() {
             hours: venueHours,
             genres: (formData.services ?? '').split(',').map((s: string) => s.trim()).filter((s: string) => s),
             photos: formData.galleryImages,
+            description: (formData.description ?? '').trim() || null,
           });
         } catch (err) {
           console.warn('[BusinessProfile] Failed to sync venue with backend:', err);
           // Don't block the user – the local save succeeded
+        }
+
+        // Sync phone and category to the backend user record
+        try {
+          await api.patch('/business/profile', {
+            phone: (formData.phone ?? '').trim() || undefined,
+            category: (formData.category ?? '').trim() || undefined,
+            name: (formData.businessName ?? '').trim() || undefined,
+          });
+        } catch (err) {
+          console.warn('[BusinessProfile] Failed to sync user profile with backend:', err);
         }
       }
 

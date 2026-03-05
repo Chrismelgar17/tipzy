@@ -284,6 +284,25 @@ business.post("/refresh", async (c) => {
   }
 });
 
+// Update user profile fields (phone, business_category, business_name)
+business.patch("/profile", requireAuth, requireRole("business", "admin"), async (c) => {
+  const userId = (c as any).get("userId");
+  let body: { phone?: string; category?: string; name?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const fields: string[] = [];
+  const values: any[] = [];
+  let i = 1;
+  if (body.phone !== undefined) { fields.push(`phone = $${i++}`); values.push(body.phone.trim() || null); }
+  if (body.category !== undefined) { fields.push(`business_category = $${i++}`); values.push(body.category.trim() || null); }
+  if (body.name !== undefined) { fields.push(`business_name = $${i++}`); values.push(body.name.trim() || null); }
+
+  if (!fields.length) return c.json({ error: "No fields to update" }, 400);
+  values.push(userId);
+  await query(`UPDATE users SET ${fields.join(", ")} WHERE id = $${i}`, values);
+  return c.json({ message: "Profile updated" });
+});
+
 // Me
 business.get("/me", requireAuth, async (c) => {
   const userId = (c as any).get("userId");
@@ -349,8 +368,9 @@ business.get("/venues", requireAuth, requireRole("business", "admin"), async (c)
     hours: Record<string, { open: string; close: string }>;
     genres: string[];
     photos: string[];
+    description: string | null;
   }>(
-    `SELECT id, name, status, current_count, capacity, address, lat, lng, updated_at, hours, genres, photos
+    `SELECT id, name, status, current_count, capacity, address, lat, lng, updated_at, hours, genres, photos, description
      FROM venues ${whereClause} ORDER BY created_at DESC`,
     params,
   );
@@ -368,6 +388,7 @@ business.get("/venues", requireAuth, requireRole("business", "admin"), async (c)
       hours: v.hours ?? {},
       genres: v.genres ?? [],
       photos: v.photos ?? [],
+      description: v.description ?? null,
     };
   });
 
