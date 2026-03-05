@@ -32,7 +32,14 @@ import {
   requireRole,
 } from "../auth";
 import { query, type DbUser, type DbOrder, type DbVenue, type DbOffer, type DbEvent } from "../db";
-import { sendBusinessApprovalRequestEmail, type BusinessApprovalData } from "../email";
+import {
+  sendBusinessApprovalRequestEmail,
+  sendOfferApprovalRequestEmail,
+  sendOfferApprovedEmail,
+  sendOfferRejectedEmail,
+  type BusinessApprovalData,
+  type OfferApprovalData,
+} from "../email";
 
 const business = new Hono();
 
@@ -610,11 +617,42 @@ business.post("/offers", requireAuth, requireRole("business", "admin"), async (c
 
   const id = crypto.randomUUID?.() ?? `offer_${Date.now()}`;
   const res = await query<DbOffer>(
-    `INSERT INTO offers (id, venue_id, owner_user_id, name, discount, description, end_date)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    `INSERT INTO offers (id, venue_id, owner_user_id, name, discount, description, end_date, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') RETURNING *`,
     [id, venueId, userId, name.trim(), Number(discount), description ?? null, endDate ?? null],
   );
-  return c.json({ offer: res.rows[0], message: "Offer created" }, 201);
+
+  // Generate one-click approve/reject tokens and notify admin
+  try {
+    const venueRes = await query<{ name: string }>("SELECT name FROM venues WHERE id = $1", [venueId]);
+    const userRes = await query<{ name: string; email: string }>("SELECT name, email FROM users WHERE id = $1", [userId]);
+    const approveToken = crypto.randomUUID?.() ?? `oat_a_${Date.now()}`;
+    const rejectToken  = crypto.randomUUID?.() ?? `oat_r_${Date.now()}`;
+    await query(
+      "INSERT INTO offer_approval_tokens (token, offer_id, action) VALUES ($1,$2,'approve'),($3,$4,'reject')",
+      [approveToken, id, rejectToken, id],
+    );
+    const apiBase = process.env.API_BASE_URL ?? process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+    const offerData: OfferApprovalData = {
+      offerId: id,
+      offerName: name.trim(),
+      discount: Number(discount),
+      description: description ?? null,
+      endDate: endDate ?? null,
+      venueName: venueRes.rows[0]?.name ?? venueId,
+      ownerName: userRes.rows[0]?.name ?? userId,
+      ownerEmail: userRes.rows[0]?.email ?? "",
+    };
+    await sendOfferApprovalRequestEmail(
+      offerData,
+      `${apiBase}/api/admin/approve-offer/${approveToken}`,
+      `${apiBase}/api/admin/approve-offer/${rejectToken}`,
+    );
+  } catch (emailErr) {
+    console.error("[business/offers] Failed to send offer approval email:", emailErr);
+  }
+
+  return c.json({ offer: res.rows[0], message: "Offer submitted for review" }, 201);
 });
 
 // PATCH /api/business/offers/:id/status – toggle active/suspended
@@ -776,6 +814,82 @@ business.delete("/events/:id", requireAuth, requireRole("business", "admin"), as
 
   await query("DELETE FROM events WHERE id = $1", [eventId]);
   return c.json({ message: "Event deleted" });
+});
+
+// POST /api/business/venues/add – add an additional venue under the same owner account
+business.post("/venues/add", requireAuth, requireRole("business", "admin"), async (c) => {
+  const userId = (c as any).get("userId") as string;
+  let body: {
+    businessName?: string;
+    businessCategory?: string;
+    address?: string;
+    lat?: number;
+    lng?: number;
+    capacity?: number;
+    minAge?: number;
+    hours?: Record<string, { open: string; close: string }>;
+    genres?: string[];
+    photos?: string[];
+  };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const { businessName, businessCategory, address, lat, lng, capacity, minAge, hours, genres, photos } = body;
+  if (!businessName) return c.json({ error: "businessName is required" }, 400);
+
+  const userRes = await query<DbUser>("SELECT id, name, email FROM users WHERE id = $1", [userId]);
+  const user = userRes.rows[0];
+  if (!user) return c.json({ error: "User not found" }, 401);
+
+  const venueId = crypto.randomUUID?.() ?? `venue_${Date.now()}`;
+  await query<DbVenue>(
+    `INSERT INTO venues
+      (id, owner_user_id, name, address, lat, lng, timezone, hours, min_age, dress_code,
+       capacity, genres, photos, price_level, status, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending',now(),now())`,
+    [
+      venueId, userId, businessName.trim(),
+      address ?? "", lat ?? null, lng ?? null,
+      "America/New_York",
+      JSON.stringify(hours ?? {}),
+      minAge ?? 18, null,
+      capacity ?? 100,
+      JSON.stringify(genres ?? []),
+      JSON.stringify(photos ?? []),
+      2,
+    ],
+  );
+
+  // Notify admin to approve the new venue
+  try {
+    const approvalToken = crypto.randomUUID?.() ?? `bat_${Date.now()}`;
+    await query(
+      "INSERT INTO business_approval_tokens (token, user_id) VALUES ($1, $2)",
+      [approvalToken, userId],
+    );
+    const apiBase = process.env.API_BASE_URL ?? process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+    const approvalUrl = `${apiBase}/api/admin/approve-business/${approvalToken}`;
+    const approvalData: BusinessApprovalData = {
+      userId,
+      ownerName: user.name,
+      ownerEmail: user.email,
+      businessName: businessName.trim(),
+      businessCategory: businessCategory ?? null,
+      phone: null,
+      address: address ?? null,
+      capacity: capacity ?? null,
+      minAge: minAge ?? null,
+      genres: genres ?? null,
+      createdAt: new Date().toISOString(),
+    };
+    await sendBusinessApprovalRequestEmail(approvalData, approvalUrl);
+  } catch (emailErr) {
+    console.error("[business/venues/add] Failed to send approval email:", emailErr);
+  }
+
+  return c.json({
+    message: "New venue submitted for review. You will be notified by email when it is approved.",
+    venueId,
+  }, 201);
 });
 
 export default business;

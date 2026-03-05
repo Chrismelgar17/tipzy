@@ -90,7 +90,7 @@ export interface DbOffer {
   discount: number;
   description: string | null;
   end_date: string | null;
-  status: 'active' | 'suspended';
+  status: 'pending' | 'active' | 'suspended' | 'rejected';
   created_at: string;
   updated_at: string;
 }
@@ -290,6 +290,13 @@ const initPromise = (async () => {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS offer_approval_tokens (
+      token      TEXT PRIMARY KEY,
+      offer_id   TEXT NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+      action     TEXT NOT NULL CHECK (action IN ('approve','reject')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS venue_views (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
       venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
@@ -306,7 +313,7 @@ const initPromise = (async () => {
       discount INTEGER NOT NULL,
       description TEXT,
       end_date DATE,
-      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended')),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','suspended','rejected')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );

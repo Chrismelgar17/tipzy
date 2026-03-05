@@ -435,3 +435,166 @@ export async function sendBusinessRejectedEmail(
 
   return sendEmail({ to, subject, text, html });
 }
+
+// ── Offer approval request (sent to Tipzy admin) ─────────────────────────────
+
+export interface OfferApprovalData {
+  offerId: string;
+  offerName: string;
+  discount: number;
+  description?: string | null;
+  endDate?: string | null;
+  venueName: string;
+  ownerName: string;
+  ownerEmail: string;
+}
+
+export async function sendOfferApprovalRequestEmail(
+  offer: OfferApprovalData,
+  approveUrl: string,
+  rejectUrl: string,
+): Promise<MailResult> {
+  const subject = `🎫 Offer Review: "${offer.offerName}" — ${offer.venueName}`;
+  const text = [
+    `New Offer Pending Review`,
+    ``,
+    `Venue     : ${offer.venueName}`,
+    `Owner     : ${offer.ownerName} (${offer.ownerEmail})`,
+    `Offer     : ${offer.offerName}`,
+    `Discount  : ${offer.discount}%`,
+    offer.description ? `Description: ${offer.description}` : ``,
+    offer.endDate ? `Expires   : ${offer.endDate}` : ``,
+    ``,
+    `Approve: ${approveUrl}`,
+    `Reject:  ${rejectUrl}`,
+  ].filter(Boolean).join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#0F0F1A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0F0F1A;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="background:linear-gradient(135deg,#7C3AED 0%,#A855F7 100%);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
+          <div style="font-size:40px;margin-bottom:10px;">🎫</div>
+          <h1 style="margin:0;color:#fff;font-size:26px;font-weight:800;">Offer Review Request</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,0.82);font-size:15px;">A business has submitted a new offer</p>
+        </td></tr>
+        <tr><td style="background:#1A1A2E;padding:24px 40px 8px;">
+          <div style="background:rgba(124,58,237,0.13);border:1px solid rgba(124,58,237,0.38);border-radius:10px;padding:14px 20px;text-align:center;">
+            <p style="margin:0;color:#C4B5FD;font-size:15px;font-weight:600;">⚡ New offer waiting for your approval</p>
+          </div>
+        </td></tr>
+        <tr><td style="background:#1A1A2E;padding:20px 40px 32px;">
+          <div style="background:#16213E;border-radius:14px;border:1px solid rgba(255,255,255,0.07);overflow:hidden;">
+            <div style="background:rgba(124,58,237,0.2);padding:20px 28px;border-bottom:1px solid rgba(255,255,255,0.06);">
+              <h2 style="margin:0;color:#fff;font-size:20px;font-weight:700;">${escHtml(offer.offerName)}</h2>
+              <p style="margin:5px 0 0;color:#A78BFA;font-size:14px;font-weight:600;">${offer.discount}% OFF · ${escHtml(offer.venueName)}</p>
+            </div>
+            <div style="padding:20px 28px 12px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                ${emailRow("🏠", "Venue", escHtml(offer.venueName))}
+                ${emailRow("👤", "Owner", escHtml(offer.ownerName))}
+                ${emailRow("📧", "Email", \`<a href="mailto:\${escHtml(offer.ownerEmail)}" style="color:#A78BFA;text-decoration:none;">\${escHtml(offer.ownerEmail)}</a>\`)}
+                ${emailRow("💸", "Discount", \`\${offer.discount}%\`)}
+                ${offer.description ? emailRow("📝", "Description", escHtml(offer.description)) : ""}
+                ${offer.endDate ? emailRow("📅", "Expires", escHtml(offer.endDate)) : ""}
+              </table>
+            </div>
+          </div>
+        </td></tr>
+        <tr><td style="background:#1A1A2E;padding:0 40px 40px;text-align:center;">
+          <p style="color:#6B7280;font-size:14px;line-height:1.65;margin:0 0 24px;">Approve to make it live for customers, or reject to notify the business.</p>
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding:0 8px 0 0;">
+                <a href="${approveUrl}" style="display:block;background:linear-gradient(135deg,#22C55E,#16A34A);color:#fff;text-decoration:none;padding:16px 0;border-radius:50px;font-size:16px;font-weight:700;text-align:center;">✅ Approve</a>
+              </td>
+              <td style="padding:0 0 0 8px;">
+                <a href="${rejectUrl}" style="display:block;background:linear-gradient(135deg,#EF4444,#B91C1C);color:#fff;text-decoration:none;padding:16px 0;border-radius:50px;font-size:16px;font-weight:700;text-align:center;">❌ Reject</a>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+        <tr><td style="background:#0A0A14;border-radius:0 0 16px 16px;padding:22px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="margin:0;color:#374151;font-size:13px;">Sent to tipzy.team@gmail.com · Tipzy Admin</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+  return sendEmail({ to: "tipzy.team@gmail.com", subject, text, html });
+}
+
+export async function sendOfferApprovedEmail(
+  to: string,
+  ownerName: string,
+  offerName: string,
+  venueName: string,
+): Promise<MailResult> {
+  const subject = `✅ Your offer "${offerName}" is now live on Tipzy!`;
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;background:#0B0B0F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0F;padding:40px 16px;"><tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
+    <tr><td style="background:linear-gradient(135deg,#22C55E,#16A34A);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
+      <div style="font-size:48px;margin-bottom:8px;">🎉</div>
+      <h1 style="margin:0;color:#fff;font-size:26px;font-weight:900;">Offer Approved!</h1>
+    </td></tr>
+    <tr><td style="background:#16161E;padding:36px 40px;text-align:center;">
+      <p style="color:#9CA3AF;font-size:15px;line-height:1.7;margin:0 0 16px;">Hi ${escHtml(ownerName)},</p>
+      <p style="color:#E5E7EB;font-size:15px;line-height:1.7;margin:0 0 24px;">
+        Your offer <strong style="color:#4ADE80;">"${escHtml(offerName)}"</strong> for <strong style="color:#A78BFA;">${escHtml(venueName)}</strong> is now live and visible to all Tipzy customers!
+      </p>
+      <p style="color:#6B7280;font-size:13px;margin:0;">Head to your dashboard to track performance. 🍸</p>
+    </td></tr>
+    <tr><td style="background:#0F0F14;border-radius:0 0 16px 16px;padding:18px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+      <p style="margin:0;color:#374151;font-size:12px;">© 2026 Tipzy · tipzy.team@gmail.com</p>
+    </td></tr>
+  </table></td></tr></table>
+</body></html>`;
+  return sendEmail({
+    to,
+    subject,
+    text: `Hi ${ownerName}, your offer "${offerName}" for ${venueName} is now live on Tipzy!`,
+    html,
+  });
+}
+
+export async function sendOfferRejectedEmail(
+  to: string,
+  ownerName: string,
+  offerName: string,
+  venueName: string,
+): Promise<MailResult> {
+  const subject = `Update on your Tipzy offer: "${offerName}"`;
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;background:#0B0B0F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0F;padding:40px 16px;"><tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
+    <tr><td style="background:linear-gradient(135deg,#374151,#1F2937);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
+      <div style="font-size:48px;margin-bottom:8px;">🍸</div>
+      <h1 style="margin:0;color:#fff;font-size:26px;font-weight:900;">Offer Update</h1>
+    </td></tr>
+    <tr><td style="background:#16161E;padding:36px 40px;text-align:center;">
+      <p style="color:#9CA3AF;font-size:15px;line-height:1.7;margin:0 0 16px;">Hi ${escHtml(ownerName)},</p>
+      <p style="color:#E5E7EB;font-size:15px;line-height:1.7;margin:0 0 20px;">
+        Your offer <strong style="color:#E5E7EB;">"${escHtml(offerName)}"</strong> for <strong style="color:#A78BFA;">${escHtml(venueName)}</strong> was not approved at this time.
+      </p>
+      <p style="color:#9CA3AF;font-size:14px;line-height:1.65;margin:0 0 12px;">Please review Tipzy's guidelines and resubmit, or contact <a href="mailto:tipzy.team@gmail.com" style="color:#A78BFA;">tipzy.team@gmail.com</a> for details.</p>
+      <p style="color:#6B7280;font-size:13px;margin:0;">— The Tipzy Team 🍸</p>
+    </td></tr>
+    <tr><td style="background:#0F0F14;border-radius:0 0 16px 16px;padding:18px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+      <p style="margin:0;color:#374151;font-size:12px;">© 2026 Tipzy · tipzy.team@gmail.com</p>
+    </td></tr>
+  </table></td></tr></table>
+</body></html>`;
+  return sendEmail({
+    to,
+    subject,
+    text: `Hi ${ownerName}, your offer "${offerName}" for ${venueName} was not approved. Contact tipzy.team@gmail.com.`,
+    html,
+  });
+}

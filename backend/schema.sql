@@ -116,6 +116,19 @@ CREATE TABLE IF NOT EXISTS business_approval_tokens (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- One-time tokens for email-based offer approval
+CREATE TABLE IF NOT EXISTS offer_approval_tokens (
+  token      TEXT PRIMARY KEY,
+  offer_id   TEXT NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+  action     TEXT NOT NULL CHECK (action IN ('approve','reject')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Allow offers to have a pending status (idempotent)
+ALTER TABLE offers DROP CONSTRAINT IF EXISTS offers_status_check;
+ALTER TABLE offers ADD CONSTRAINT offers_status_check
+  CHECK (status IN ('pending','active','suspended','rejected'));
+
 -- ── Phase 4: Stripe Payment Engine ───────────────────────────────────────────
 
 -- Add Stripe customer ID to users (idempotent)

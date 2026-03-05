@@ -11,7 +11,7 @@
 import { Hono } from "hono";
 import { requireAuth, requireRole, hashPassword, verifyPassword, signAccessToken, signRefreshToken } from "../auth";
 import { query, type DbUser } from "../db";
-import { sendBusinessApprovedEmail, sendBusinessRejectedEmail } from "../email";
+import { sendBusinessApprovedEmail, sendBusinessRejectedEmail, sendOfferApprovedEmail, sendOfferRejectedEmail } from "../email";
 
 const admin = new Hono();
 
@@ -97,6 +97,63 @@ admin.get("/approve-business/:token", async (c) => {
   </div>
 </body>
 </html>`, 200);
+});
+
+// ── PUBLIC: one-click offer approve/reject via email link ────────────────────
+const OFFER_HTML_BASE = `*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0F0F1A;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;}.card{background:#16213E;border-radius:20px;padding:52px 44px;text-align:center;max-width:480px;width:90%;border:1px solid rgba(255,255,255,0.08);}.icon{font-size:68px;margin-bottom:24px}h1{font-size:26px;font-weight:800;margin-bottom:12px}p{color:#9CA3AF;font-size:15px;line-height:1.65}.badge{display:inline-block;border-radius:50px;padding:8px 22px;font-size:14px;font-weight:700;margin:16px 0 24px;}`;
+
+admin.get("/approve-offer/:token", async (c) => {
+  const token = c.req.param("token");
+
+  const tokenRes = await query<{ offer_id: string; action: string }>(
+    "SELECT offer_id, action FROM offer_approval_tokens WHERE token = $1",
+    [token],
+  );
+  const row = tokenRes.rows[0];
+  if (!row) {
+    return c.html(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Tipzy</title><style>${OFFER_HTML_BASE}</style></head><body><div class="card"><div class="icon">❌</div><h1>Invalid or Expired Link</h1><p>This link has already been used or is not valid.</p></div></body></html>`, 404);
+  }
+
+  const offerId = row.offer_id;
+  const action = row.action as "approve" | "reject";
+
+  const offerRes = await query<{ name: string; owner_user_id: string; venue_id: string }>(
+    "SELECT name, owner_user_id, venue_id FROM offers WHERE id = $1",
+    [offerId],
+  );
+  const offer = offerRes.rows[0];
+  if (!offer) {
+    await query("DELETE FROM offer_approval_tokens WHERE offer_id = $1", [offerId]);
+    return c.html(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Tipzy</title><style>${OFFER_HTML_BASE}</style></head><body><div class="card"><div class="icon">⚠️</div><h1>Offer Not Found</h1><p>This offer may have been deleted.</p></div></body></html>`, 404);
+  }
+
+  const newStatus = action === "approve" ? "active" : "rejected";
+  await query("UPDATE offers SET status = $1, updated_at = now() WHERE id = $2", [newStatus, offerId]);
+  await query("DELETE FROM offer_approval_tokens WHERE offer_id = $1", [offerId]);
+
+  const ownerRes = await query<{ name: string; email: string }>(
+    "SELECT name, email FROM users WHERE id = $1",
+    [offer.owner_user_id],
+  );
+  const owner = ownerRes.rows[0];
+  const venueRes = await query<{ name: string }>("SELECT name FROM venues WHERE id = $1", [offer.venue_id]);
+  const venueName = venueRes.rows[0]?.name ?? offer.venue_id;
+
+  try {
+    if (action === "approve") {
+      await sendOfferApprovedEmail(owner.email, owner.name, offer.name, venueName);
+    } else {
+      await sendOfferRejectedEmail(owner.email, owner.name, offer.name, venueName);
+    }
+  } catch (err) {
+    console.error("[admin] Failed to send offer decision email:", err);
+  }
+
+  if (action === "approve") {
+    return c.html(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Tipzy – Offer Approved</title><style>${OFFER_HTML_BASE}</style></head><body><div class="card"><div class="icon">🎉</div><h1>Offer Approved!</h1><div class="badge" style="background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#4ADE80;">✅ Now Live</div><p>The offer <strong style="color:#fff;">"${offer.name.replace(/</g,"&lt;").replace(/>/g,"&gt;")}"</strong> is now visible to all Tipzy customers.</p></div></body></html>`, 200);
+  } else {
+    return c.html(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Tipzy – Offer Rejected</title><style>${OFFER_HTML_BASE}</style></head><body><div class="card"><div class="icon">🚫</div><h1>Offer Rejected</h1><div class="badge" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#F87171;">❌ Not Approved</div><p>The offer <strong style="color:#fff;">"${offer.name.replace(/</g,"&lt;").replace(/>/g,"&gt;")}"</strong> has been rejected. The business owner has been notified.</p></div></body></html>`, 200);
+  }
 });
 
 // Admin login – only accepts users with role='admin'

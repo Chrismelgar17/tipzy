@@ -28,12 +28,12 @@ interface Offer {
   name: string;
   discount: number;
   end_date: string | null;
-  status: 'active' | 'suspended';
+  status: 'pending' | 'active' | 'suspended' | 'rejected';
   description: string | null;
   created_at: string;
 }
 
-type TabType = 'active' | 'suspended';
+type TabType = 'pending' | 'active' | 'suspended' | 'rejected';
 
 export default function OffersScreen() {
   const { theme } = useTheme();
@@ -62,7 +62,16 @@ export default function OffersScreen() {
     }, [fetchOffers]),
   );
 
-  const filteredOffers = offers.filter(offer => offer.status === selectedTab);
+  const filteredOffers = offers.filter(o => o.status === selectedTab);
+
+  const getStatusColor = (status: Offer['status']) => {
+    if (status === 'active') return theme.colors.success;
+    if (status === 'pending') return '#F59E0B';
+    if (status === 'rejected') return '#EF4444';
+    return theme.colors.warning;
+  };
+
+  const pendingCount = offers.filter(o => o.status === 'pending').length;
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'No expiry';
@@ -118,6 +127,13 @@ export default function OffersScreen() {
   };
 
   const handleMoreOptions = (offer: Offer) => {
+    if (offer.status === 'pending' || offer.status === 'rejected') {
+      Alert.alert(offer.name, 'What would you like to do?', [
+        { text: 'Delete', style: 'destructive', onPress: () => handleDelete(offer) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
     const toggleLabel = offer.status === 'active' ? 'Suspend Offer' : 'Activate Offer';
     Alert.alert(offer.name, 'What would you like to do?', [
       { text: toggleLabel, onPress: () => handleToggleStatus(offer) },
@@ -139,12 +155,9 @@ export default function OffersScreen() {
               <Percent size={12} color={theme.colors.white} />
               <Text style={styles.discountText}>{item.discount}% OFF</Text>
             </View>
-            <View style={styles.statusBadge}>
-              <Text style={[
-                styles.statusText,
-                { color: item.status === 'active' ? theme.colors.success : theme.colors.warning }
-              ]}>
-                {item.status.toUpperCase()}
+            <View style={[styles.statusBadge, { borderColor: getStatusColor(item.status) + '50', backgroundColor: getStatusColor(item.status) + '18' }]}>
+              <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+                {item.status === 'pending' ? '⏳ PENDING REVIEW' : item.status === 'rejected' ? '❌ REJECTED' : item.status.toUpperCase()}
               </Text>
             </View>
           </View>
@@ -197,6 +210,12 @@ export default function OffersScreen() {
     },
     activeTab: {
       backgroundColor: theme.colors.purple,
+    },
+    pendingTab: {
+      backgroundColor: '#92400E',
+    },
+    rejectedTab: {
+      backgroundColor: '#7F1D1D',
     },
     tabText: {
       fontSize: 16,
@@ -352,6 +371,10 @@ export default function OffersScreen() {
       <Text style={styles.emptyDescription}>
         {type === 'active'
           ? 'Create your first offer to start attracting customers with special deals and discounts.'
+          : type === 'pending'
+          ? 'Offers waiting for Tipzy admin approval will appear here.'
+          : type === 'rejected'
+          ? 'Rejected offers appear here. Contact tipzy.team@gmail.com for more info.'
           : "You don't have any suspended offers at the moment."
         }
       </Text>
@@ -368,6 +391,15 @@ export default function OffersScreen() {
     <View style={styles.container}>
       <View style={styles.tabContainer}>
         <TouchableOpacity
+          style={[styles.tab, selectedTab === 'pending' && styles.pendingTab]}
+          onPress={() => setSelectedTab('pending')}
+          testID="pending-tab"
+        >
+          <Text style={[styles.tabText, selectedTab === 'pending' && styles.activeTabText]}>
+            Pending{pendingCount > 0 ? ` (${pendingCount})` : ''}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.tab, selectedTab === 'active' && styles.activeTab]}
           onPress={() => setSelectedTab('active')}
           testID="active-tab"
@@ -383,6 +415,15 @@ export default function OffersScreen() {
         >
           <Text style={[styles.tabText, selectedTab === 'suspended' && styles.activeTabText]}>
             Suspended
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, selectedTab === 'rejected' && styles.rejectedTab]}
+          onPress={() => setSelectedTab('rejected')}
+          testID="rejected-tab"
+        >
+          <Text style={[styles.tabText, selectedTab === 'rejected' && styles.activeTabText]}>
+            Rejected
           </Text>
         </TouchableOpacity>
       </View>
