@@ -315,6 +315,7 @@ const styles = StyleSheet.create({
   markerOuter: {
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   customMarker: {
     width: 28,
@@ -341,6 +342,7 @@ const styles = StyleSheet.create({
     height: 60,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   userLocationRing: {
     position: 'absolute',
