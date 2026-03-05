@@ -496,8 +496,8 @@ export async function sendOfferApprovalRequestEmail(
               <table width="100%" cellpadding="0" cellspacing="0">
                 ${emailRow("🏠", "Venue", escHtml(offer.venueName))}
                 ${emailRow("👤", "Owner", escHtml(offer.ownerName))}
-                ${emailRow("📧", "Email", \`<a href="mailto:\${escHtml(offer.ownerEmail)}" style="color:#A78BFA;text-decoration:none;">\${escHtml(offer.ownerEmail)}</a>\`)}
-                ${emailRow("💸", "Discount", \`\${offer.discount}%\`)}
+                ${emailRow("📧", "Email", '<a href="mailto:' + escHtml(offer.ownerEmail) + '" style="color:#A78BFA;text-decoration:none;">' + escHtml(offer.ownerEmail) + '</a>')}
+                ${emailRow("💸", "Discount", offer.discount + '%')}
                 ${offer.description ? emailRow("📝", "Description", escHtml(offer.description)) : ""}
                 ${offer.endDate ? emailRow("📅", "Expires", escHtml(offer.endDate)) : ""}
               </table>
