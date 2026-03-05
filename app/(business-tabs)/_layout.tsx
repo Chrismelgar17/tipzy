@@ -1,5 +1,5 @@
 import { Tabs, Redirect, router } from "expo-router";
-import { Home, Gift, Plus, ShoppingCart, Settings, ArrowLeft } from "lucide-react-native";
+import { Home, Gift, Plus, CalendarDays, Settings, ArrowLeft } from "lucide-react-native";
 import React from "react";
 import { theme } from "@/constants/theme";
 import { useAuth } from "@/hooks/auth-context";
@@ -87,10 +87,14 @@ export default function BusinessTabLayout() {
       />
       <Tabs.Screen
         name="orders"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
+        name="events"
         options={{
-          title: "Orders",
-          tabBarIcon: ({ color, size }) => <ShoppingCart size={size} color={color} />,
-          headerTitle: "Orders",
+          title: "Events",
+          tabBarIcon: ({ color, size }) => <CalendarDays size={size} color={color} />,
+          headerTitle: "Events",
         }}
       />
       <Tabs.Screen

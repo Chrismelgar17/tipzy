@@ -1,0 +1,606 @@
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  SafeAreaView,
+  Modal,
+  RefreshControl,
+} from 'react-native';
+import { useTheme } from '@/hooks/theme-context';
+import { useFocusEffect } from 'expo-router';
+import {
+  Calendar,
+  Plus,
+  Clock,
+  Trash2,
+  Pencil,
+  X,
+  ChevronRight,
+  CalendarDays,
+} from 'lucide-react-native';
+import api from '@/lib/api';
+
+interface BusinessEvent {
+  id: string;
+  venue_id: string;
+  venue_name: string;
+  name: string;
+  description: string | null;
+  event_date: string;
+  event_time: string | null;
+  image: string | null;
+  status: string;
+  created_at: string;
+}
+
+interface EventForm {
+  name: string;
+  date: string;
+  time: string;
+  description: string;
+}
+
+const EMPTY_FORM: EventForm = { name: '', date: '', time: '', description: '' };
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatTime(timeStr: string | null) {
+  if (!timeStr) return '';
+  const [h, m] = timeStr.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hr = h % 12 || 12;
+  return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+function isUpcoming(dateStr: string) {
+  return new Date(dateStr) >= new Date(new Date().toDateString());
+}
+
+export default function EventsScreen() {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+
+  const [events, setEvents] = useState<BusinessEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [venueId, setVenueId] = useState<string | null>(null);
+  const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
+
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<BusinessEvent | null>(null);
+  const [form, setForm] = useState<EventForm>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const [eventsRes, venueRes] = await Promise.all([
+        api.get('/business/events'),
+        api.get('/business/venues'),
+      ]);
+      setEvents(eventsRes.data?.events ?? []);
+      const venues = venueRes.data?.venues ?? [];
+      if (venues.length > 0) setVenueId(venues[0].id);
+    } catch (err) {
+      console.error('[EventsScreen] fetch error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { fetchData(); }, [fetchData]));
+
+  const openCreateModal = () => {
+    setEditingEvent(null);
+    setForm(EMPTY_FORM);
+    setModalVisible(true);
+  };
+
+  const openEditModal = (event: BusinessEvent) => {
+    setEditingEvent(event);
+    setForm({
+      name: event.name,
+      date: event.event_date?.slice(0, 10) ?? '',
+      time: event.event_time?.slice(0, 5) ?? '',
+      description: event.description ?? '',
+    });
+    setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setEditingEvent(null);
+    setForm(EMPTY_FORM);
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim() || !form.date.trim() || !form.time.trim()) {
+      Alert.alert('Missing fields', 'Please fill in event name, date, and time.');
+      return;
+    }
+    if (!venueId) {
+      Alert.alert('Error', 'No venue found for your account.');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editingEvent) {
+        // Edit
+        await api.patch(`/business/events/${editingEvent.id}`, {
+          name: form.name.trim(),
+          date: form.date.trim(),
+          time: form.time.trim(),
+          description: form.description.trim() || undefined,
+        });
+        setEvents(prev =>
+          prev.map(e =>
+            e.id === editingEvent.id
+              ? {
+                  ...e,
+                  name: form.name.trim(),
+                  event_date: form.date.trim(),
+                  event_time: form.time.trim(),
+                  description: form.description.trim() || null,
+                }
+              : e,
+          ),
+        );
+        Alert.alert('Saved', 'Event updated successfully.');
+      } else {
+        // Create
+        const res = await api.post('/business/events', {
+          venueId,
+          name: form.name.trim(),
+          date: form.date.trim(),
+          time: form.time.trim(),
+          description: form.description.trim() || undefined,
+        });
+        const newEvent: BusinessEvent = res.data?.event ?? {
+          id: Date.now().toString(),
+          venue_id: venueId,
+          venue_name: '',
+          name: form.name.trim(),
+          description: form.description.trim() || null,
+          event_date: form.date.trim(),
+          event_time: form.time.trim(),
+          image: null,
+          status: 'active',
+          created_at: new Date().toISOString(),
+        };
+        setEvents(prev => [newEvent, ...prev]);
+        Alert.alert('Created', 'Event added to your calendar.');
+      }
+      closeModal();
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.error ?? 'Could not save event. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = (event: BusinessEvent) => {
+    Alert.alert(
+      'Delete Event',
+      `Remove "${event.name}" from your calendar?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete(`/business/events/${event.id}`);
+              setEvents(prev => prev.filter(e => e.id !== event.id));
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.error ?? 'Could not delete event.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const filtered = events.filter(e =>
+    tab === 'upcoming' ? isUpcoming(e.event_date) : !isUpcoming(e.event_date),
+  );
+
+  const renderEmpty = () => (
+    <View style={s.emptyContainer}>
+      <CalendarDays size={52} color={theme.colors.text.tertiary} />
+      <Text style={s.emptyTitle}>{tab === 'upcoming' ? 'No upcoming events' : 'No past events'}</Text>
+      {tab === 'upcoming' && (
+        <Text style={s.emptySubtitle}>Tap the + button to add your first event</Text>
+      )}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={s.container}>
+      {/* Tab bar */}
+      <View style={s.tabRow}>
+        <TouchableOpacity
+          style={[s.tabBtn, tab === 'upcoming' && s.tabBtnActive]}
+          onPress={() => setTab('upcoming')}
+        >
+          <Text style={[s.tabBtnText, tab === 'upcoming' && s.tabBtnTextActive]}>Upcoming</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.tabBtn, tab === 'past' && s.tabBtnActive]}
+          onPress={() => setTab('past')}
+        >
+          <Text style={[s.tabBtnText, tab === 'past' && s.tabBtnTextActive]}>Past</Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={s.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.purple} />
+        </View>
+      ) : (
+        <ScrollView
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={s.list}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => fetchData(true)}
+              tintColor={theme.colors.purple} />
+          }
+        >
+          {filtered.length === 0
+            ? renderEmpty()
+            : filtered.map(event => (
+                <View key={event.id} style={s.card}>
+                  {/* Date badge */}
+                  <View style={s.dateBadge}>
+                    <Text style={s.dateBadgeMonth}>
+                      {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
+                    </Text>
+                    <Text style={s.dateBadgeDay}>
+                      {new Date(event.event_date).getDate()}
+                    </Text>
+                  </View>
+
+                  {/* Event info */}
+                  <View style={s.cardBody}>
+                    <Text style={s.cardTitle} numberOfLines={1}>{event.name}</Text>
+                    <View style={s.cardMeta}>
+                      <Calendar size={13} color={theme.colors.text.secondary} />
+                      <Text style={s.cardMetaText}>{formatDate(event.event_date)}</Text>
+                    </View>
+                    {event.event_time && (
+                      <View style={s.cardMeta}>
+                        <Clock size={13} color={theme.colors.text.secondary} />
+                        <Text style={s.cardMetaText}>{formatTime(event.event_time)}</Text>
+                      </View>
+                    )}
+                    {event.description ? (
+                      <Text style={s.cardDesc} numberOfLines={2}>{event.description}</Text>
+                    ) : null}
+                  </View>
+
+                  {/* Actions */}
+                  <View style={s.cardActions}>
+                    <TouchableOpacity style={s.actionBtn} onPress={() => openEditModal(event)}>
+                      <Pencil size={16} color={theme.colors.purple} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.actionBtn} onPress={() => handleDelete(event)}>
+                      <Trash2 size={16} color={theme.colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+        </ScrollView>
+      )}
+
+      {/* FAB */}
+      <TouchableOpacity style={s.fab} onPress={openCreateModal} activeOpacity={0.85}>
+        <Plus size={26} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Create / Edit Modal */}
+      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={closeModal}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            {/* Header */}
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>{editingEvent ? 'Edit Event' : 'New Event'}</Text>
+              <TouchableOpacity onPress={closeModal} style={s.modalClose}>
+                <X size={22} color={theme.colors.text.primary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.modalBody}>
+              {/* Name */}
+              <View style={s.fieldGroup}>
+                <Text style={s.fieldLabel}>Event Name <Text style={s.required}>*</Text></Text>
+                <TextInput
+                  style={s.input}
+                  placeholder="e.g., Saturday Night Party"
+                  placeholderTextColor={theme.colors.text.tertiary}
+                  value={form.name}
+                  onChangeText={t => setForm(f => ({ ...f, name: t }))}
+                />
+              </View>
+
+              {/* Date */}
+              <View style={s.fieldGroup}>
+                <Text style={s.fieldLabel}>Date <Text style={s.required}>*</Text></Text>
+                <TextInput
+                  style={s.input}
+                  placeholder="YYYY-MM-DD  e.g., 2026-03-15"
+                  placeholderTextColor={theme.colors.text.tertiary}
+                  value={form.date}
+                  onChangeText={t => setForm(f => ({ ...f, date: t }))}
+                  keyboardType="numbers-and-punctuation"
+                />
+              </View>
+
+              {/* Time */}
+              <View style={s.fieldGroup}>
+                <Text style={s.fieldLabel}>Start Time <Text style={s.required}>*</Text></Text>
+                <TextInput
+                  style={s.input}
+                  placeholder="HH:MM  e.g., 22:00"
+                  placeholderTextColor={theme.colors.text.tertiary}
+                  value={form.time}
+                  onChangeText={t => setForm(f => ({ ...f, time: t }))}
+                  keyboardType="numbers-and-punctuation"
+                />
+              </View>
+
+              {/* Description */}
+              <View style={s.fieldGroup}>
+                <Text style={s.fieldLabel}>Description</Text>
+                <TextInput
+                  style={[s.input, s.textArea]}
+                  placeholder="What's happening at this event?"
+                  placeholderTextColor={theme.colors.text.tertiary}
+                  value={form.description}
+                  onChangeText={t => setForm(f => ({ ...f, description: t }))}
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+
+              {/* Save */}
+              <TouchableOpacity
+                style={[s.saveBtn, saving && { opacity: 0.6 }]}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={s.saveBtnText}>{editingEvent ? 'Save Changes' : 'Add to Calendar'}</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+function makeStyles(theme: any) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    tabRow: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      marginTop: 12,
+      marginBottom: 8,
+      backgroundColor: theme.colors.card,
+      borderRadius: 10,
+      padding: 3,
+    },
+    tabBtn: {
+      flex: 1,
+      paddingVertical: 8,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
+    tabBtnActive: {
+      backgroundColor: theme.colors.purple,
+    },
+    tabBtnText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.text.secondary,
+    },
+    tabBtnTextActive: {
+      color: '#fff',
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    list: {
+      padding: 16,
+      paddingBottom: 100,
+      gap: 12,
+    },
+    card: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.card,
+      borderRadius: 14,
+      padding: 14,
+      alignItems: 'center',
+      gap: 14,
+    },
+    dateBadge: {
+      width: 50,
+      height: 58,
+      borderRadius: 10,
+      backgroundColor: theme.colors.purple,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    dateBadgeMonth: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: 'rgba(255,255,255,0.8)',
+      letterSpacing: 0.5,
+    },
+    dateBadgeDay: {
+      fontSize: 22,
+      fontWeight: '800',
+      color: '#fff',
+    },
+    cardBody: {
+      flex: 1,
+      gap: 4,
+    },
+    cardTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.colors.text.primary,
+      marginBottom: 2,
+    },
+    cardMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+    cardMetaText: {
+      fontSize: 13,
+      color: theme.colors.text.secondary,
+    },
+    cardDesc: {
+      fontSize: 12,
+      color: theme.colors.text.tertiary,
+      marginTop: 4,
+      lineHeight: 17,
+    },
+    cardActions: {
+      gap: 10,
+      alignItems: 'center',
+    },
+    actionBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: theme.colors.background,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    emptyContainer: {
+      alignItems: 'center',
+      paddingTop: 80,
+      gap: 12,
+    },
+    emptyTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.colors.text.secondary,
+    },
+    emptySubtitle: {
+      fontSize: 14,
+      color: theme.colors.text.tertiary,
+      textAlign: 'center',
+      paddingHorizontal: 40,
+    },
+    fab: {
+      position: 'absolute',
+      right: 20,
+      bottom: 28,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: theme.colors.purple,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: theme.colors.purple,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.45,
+      shadowRadius: 10,
+      elevation: 8,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'flex-end',
+    },
+    modalSheet: {
+      backgroundColor: theme.colors.background,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      maxHeight: '90%',
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.colors.text.primary,
+    },
+    modalClose: {
+      padding: 4,
+    },
+    modalBody: {
+      padding: 20,
+      gap: 18,
+      paddingBottom: 40,
+    },
+    fieldGroup: {
+      gap: 8,
+    },
+    fieldLabel: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.colors.text.primary,
+    },
+    required: {
+      color: theme.colors.error,
+    },
+    input: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 15,
+      color: theme.colors.text.primary,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    textArea: {
+      minHeight: 100,
+      textAlignVertical: 'top',
+    },
+    saveBtn: {
+      backgroundColor: theme.colors.purple,
+      borderRadius: 12,
+      paddingVertical: 15,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    saveBtnText: {
+      color: '#fff',
+      fontSize: 16,
+      fontWeight: '700',
+    },
+  });
+}

@@ -734,6 +734,34 @@ business.patch("/events/:id/status", requireAuth, requireRole("business", "admin
   return c.json({ event: updated.rows[0] });
 });
 
+// PATCH /api/business/events/:id – full edit (name, date, time, description)
+business.patch("/events/:id", requireAuth, requireRole("business", "admin"), async (c) => {
+  const eventId = c.req.param("id");
+  const userId = (c as any).get("userId");
+  const userRole = (c as any).get("role");
+
+  let body: { name?: string; date?: string; time?: string; description?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const { name, date, time, description } = body;
+  if (!name?.trim() || !date?.trim() || !time?.trim()) {
+    return c.json({ error: "name, date, and time are required" }, 400);
+  }
+
+  const eventRes = await query<{ venue_id: string }>("SELECT venue_id FROM events WHERE id = $1", [eventId]);
+  if (!eventRes.rowCount) return c.json({ error: "Event not found" }, 404);
+
+  const check = await assertVenueOwner(userId, userRole, eventRes.rows[0].venue_id);
+  if (check === "forbidden") return c.json({ error: "Forbidden" }, 403);
+
+  const updated = await query<DbEvent>(
+    `UPDATE events SET name = $1, event_date = $2, event_time = $3, description = $4, updated_at = now()
+     WHERE id = $5 RETURNING *`,
+    [name.trim(), date.trim(), time.trim(), description ?? null, eventId],
+  );
+  return c.json({ event: updated.rows[0] });
+});
+
 // DELETE /api/business/events/:id
 business.delete("/events/:id", requireAuth, requireRole("business", "admin"), async (c) => {
   const eventId = c.req.param("id");
