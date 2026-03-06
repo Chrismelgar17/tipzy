@@ -70,8 +70,8 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             build
 
-      # ── 7. Package as .zip for Appetize.io ──────────────────────────────────
-      - name: Package .app as zip
+      # ── 7. Package as .tar.gz for Appetize.io ─────────────────────────────────
+      - name: Package .app as tar.gz
         run: |
           set -eo pipefail
           echo "Searching for .app in derived_data..."
@@ -83,15 +83,15 @@ jobs:
           fi
           echo "Found app at: $APP_PATH"
           cd "$(dirname "$APP_PATH")"
-          # Appetize accepts both .zip and .tar.gz — .zip is most reliable
-          zip -r "$GITHUB_WORKSPACE/Tipzy-simulator.zip" "$(basename "$APP_PATH")"
-          echo "Created Tipzy-simulator.zip"
-          ls -lh "$GITHUB_WORKSPACE/Tipzy-simulator.zip"
+          # Appetize requires .tar.gz — GitHub artifact download wraps .zip in another zip
+          tar -czf "$GITHUB_WORKSPACE/Tipzy-simulator.tar.gz" "$(basename "$APP_PATH")"
+          echo "Created Tipzy-simulator.tar.gz"
+          ls -lh "$GITHUB_WORKSPACE/Tipzy-simulator.tar.gz"
 
       # ── 8. Upload artifact ───────────────────────────────────────────────────
       - name: Upload simulator build
         uses: actions/upload-artifact@v4
         with:
           name: Tipzy-iOS-Simulator
-          path: Tipzy-simulator.zip
+          path: Tipzy-simulator.tar.gz
           retention-days: 7
