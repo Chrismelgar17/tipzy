@@ -1,0 +1,89 @@
+name: Build iOS Simulator (Appetize)
+
+on:
+  workflow_dispatch:   # trigger manually from the GitHub Actions tab
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js ───────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 3. Install JS deps ───────────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ── 4. Prebuild (generate ios/ native project) ───────────────────────────
+      - name: Expo Prebuild
+        env:
+          EXPO_PUBLIC_API_URL: https://tipzy-production.up.railway.app
+          EXPO_PUBLIC_RORK_API_BASE_URL: https://tipzy-production.up.railway.app
+        run: npx expo prebuild --platform ios --clean --non-interactive
+
+      # ── 5. CocoaPods ─────────────────────────────────────────────────────────
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: pods-
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      # ── 6. Build for simulator ───────────────────────────────────────────────
+      - name: Build iOS Simulator
+        run: |
+          cd ios
+          SCHEME=$(ls *.xcworkspace | head -1 | sed 's/.xcworkspace//')
+          echo "Using scheme: $SCHEME"
+          xcodebuild \
+            -workspace "$SCHEME.xcworkspace" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | xcpretty --color || xcodebuild \
+            -workspace "$SCHEME.xcworkspace" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      # ── 7. Package as tar.gz for Appetize.io ────────────────────────────────
+      - name: Package .app as tar.gz
+        run: |
+          APP_PATH=$(find ios/build/Build/Products -name "*.app" -maxdepth 3 | head -1)
+          echo "Found app at: $APP_PATH"
+          APP_DIR=$(dirname "$APP_PATH")
+          APP_NAME=$(basename "$APP_PATH")
+          cd "$APP_DIR"
+          tar -czf "$GITHUB_WORKSPACE/Tipzy-simulator.tar.gz" "$APP_NAME"
+          echo "Created Tipzy-simulator.tar.gz"
+
+      # ── 8. Upload artifact ───────────────────────────────────────────────────
+      - name: Upload simulator build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tipzy-iOS-Simulator
+          path: Tipzy-simulator.tar.gz
+          retention-days: 7
