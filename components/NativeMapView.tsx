@@ -157,7 +157,7 @@ function VenueMarker({
       >
         <View style={[
           styles.customMarker,
-          { backgroundColor: getMarkerColor(venue.crowdCount) }
+          { backgroundColor: getMarkerColor(isFinite(venue.crowdCount) ? venue.crowdCount : 0) }
         ]} />
       </View>
     </Marker>
@@ -191,15 +191,24 @@ function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocatio
     );
   }, [userLocation]);
 
-  // Build list of venues that have real coordinates
+  // Build list of venues that have real, finite coordinates
   const mappableVenues = useMemo(
-    () => venues.filter(v => v.geo && (v.geo.lat !== 0 || v.geo.lng !== 0)),
+    () => venues.filter(v =>
+      v.geo &&
+      typeof v.geo.lat === 'number' && isFinite(v.geo.lat) &&
+      typeof v.geo.lng === 'number' && isFinite(v.geo.lng) &&
+      (v.geo.lat !== 0 || v.geo.lng !== 0)
+    ),
     [venues],
   );
 
   // Center on user location if available, else first venue, else US fallback
   const initialRegion = useMemo(() => {
-    if (userLocation) {
+    if (
+      userLocation &&
+      isFinite(userLocation.latitude) &&
+      isFinite(userLocation.longitude)
+    ) {
       return {
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,

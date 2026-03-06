@@ -121,14 +121,16 @@ export default function MapScreen() {
 
 
   const getMarkerColor = (crowdCount: number) => {
-    if (crowdCount >= 100) return '#FF6B6B';
-    if (crowdCount >= 50) return '#FFD93D';
+    const count = isFinite(crowdCount) ? crowdCount : 0;
+    if (count >= 100) return '#FF6B6B';
+    if (count >= 50) return '#FFD93D';
     return '#6BCF7F';
   };
 
   const getCrowdLabel = (crowdCount: number) => {
-    if (crowdCount >= 100) return 'Packed';
-    if (crowdCount >= 50) return 'Busy';
+    const count = isFinite(crowdCount) ? crowdCount : 0;
+    if (count >= 100) return 'Packed';
+    if (count >= 50) return 'Busy';
     return 'Not Crowded';
   };
 
@@ -136,6 +138,7 @@ export default function MapScreen() {
   const nearbyVenues = userLocation
     ? venues.map((v) => {
         if (!v.geo || (v.geo.lat === 0 && v.geo.lng === 0)) return v;
+        if (!isFinite(v.geo.lat) || !isFinite(v.geo.lng)) return v;
         return {
           ...v,
           distance: distanceMiles(
