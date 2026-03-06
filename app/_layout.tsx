@@ -5,6 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { configureGoogleSignIn } from '@/lib/google-signin';
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from "@/hooks/auth-context";
 import { TicketsProvider } from "@/hooks/tickets-context";
 import { ChatProvider } from "@/hooks/chat-context";
@@ -110,7 +111,7 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
     <View style={errorStyles.container}>
       <Text style={errorStyles.title}>Something went wrong</Text>
       <Text style={errorStyles.subtitle}>
-        Redirecting you to home...
+        {error.message || 'Redirecting you to home...'}
       </Text>
       <TouchableOpacity
         style={errorStyles.button}
@@ -223,6 +224,7 @@ function ThemedRootLayout() {
   });
 
   return (
+    <SafeAreaProvider>
     <StripeProvider publishableKey={STRIPE_KEY}>
       <GestureHandlerRootView style={rootStyles.container}>
       <ErrorBoundary
@@ -250,6 +252,7 @@ function ThemedRootLayout() {
       </ErrorBoundary>
     </GestureHandlerRootView>
     </StripeProvider>
+    </SafeAreaProvider>
   );
 }
 
