@@ -11,6 +11,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback } from 'react';
 import type { Subscription } from '@/types/models';
 import * as paymentService from '@/lib/payment.service';
+import { useAuth } from '@/hooks/auth-context';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,8 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const { isAuthenticated } = useAuth();
+
     // ── Derived booleans ────────────────────────────────────────────────────
     const isTrialing          = subscription?.status === 'trialing';
     const isActive            = subscription?.status === 'active';
@@ -85,10 +88,14 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(
       }
     }, []);
 
-    // Load on mount
+    // Load on mount — only when authenticated
     useEffect(() => {
-      void refresh();
-    }, [refresh]);
+      if (isAuthenticated) {
+        void refresh();
+      } else {
+        setSubscription(null);
+      }
+    }, [isAuthenticated, refresh]);
 
     // ── Start trial ─────────────────────────────────────────────────────────
     const startTrial = useCallback(async (plan: 'customer_monthly' | 'customer_pro' | 'business_monthly' | 'business_pro' | 'customer' | 'business') => {
