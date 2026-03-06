@@ -507,6 +507,11 @@ stripeRouter.get("/subscription", requireAuth, async (c) => {
       },
     });
   } catch (err: any) {
+    // Postgres "relation does not exist" (42P01) means the subscriptions table
+    // hasn't been migrated yet — treat as no subscription rather than 500.
+    if (err?.code === '42P01' || err?.message?.includes('relation') && err?.message?.includes('does not exist')) {
+      return c.json({ subscription: null });
+    }
     return c.json({ error: err?.message ?? "Failed to get subscription" }, 500);
   }
 });

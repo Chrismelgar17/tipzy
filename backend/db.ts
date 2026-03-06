@@ -351,6 +351,46 @@ const initPromise = (async () => {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );`);
 
+  // User payment methods
+  await pool.query(`CREATE TABLE IF NOT EXISTS user_payment_methods (
+    id                       TEXT PRIMARY KEY,
+    user_id                  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    stripe_customer_id       TEXT,
+    stripe_payment_method_id TEXT NOT NULL,
+    brand                    TEXT,
+    last4                    TEXT,
+    exp_month                INTEGER,
+    exp_year                 INTEGER,
+    is_default               BOOLEAN NOT NULL DEFAULT false,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+  );`);
+  await pool.query("CREATE INDEX IF NOT EXISTS upm_user_id_idx ON user_payment_methods (user_id);");
+
+  // Subscriptions
+  await pool.query(`CREATE TABLE IF NOT EXISTS subscriptions (
+    id                       TEXT PRIMARY KEY,
+    user_id                  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    stripe_customer_id       TEXT,
+    stripe_subscription_id   TEXT UNIQUE,
+    stripe_payment_method_id TEXT,
+    plan                     TEXT NOT NULL DEFAULT 'customer_monthly',
+    status                   TEXT NOT NULL DEFAULT 'trialing',
+    trial_start              TIMESTAMPTZ,
+    trial_end                TIMESTAMPTZ,
+    current_period_start     TIMESTAMPTZ,
+    current_period_end       TIMESTAMPTZ,
+    cancel_at_period_end     BOOLEAN NOT NULL DEFAULT false,
+    canceled_at              TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+  );`);
+  await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_user_id_unique ON subscriptions (user_id);");
+  await pool.query("CREATE INDEX IF NOT EXISTS subscriptions_stripe_sub_idx ON subscriptions (stripe_subscription_id);");
+  // Expand plan CHECK constraint to support all 4 tiers (idempotent)
+  await pool.query("ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_check;");
+  await pool.query(`ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_check
+    CHECK (plan IN ('customer_monthly','customer_pro','business_monthly','business_pro'));`);
+
   await ensureAdminSeed();
   await ensureTestCustomerSeed();
 })().catch((err) => {
