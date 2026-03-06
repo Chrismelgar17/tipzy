@@ -88,10 +88,13 @@ jobs:
           echo "Created Tipzy-simulator.tar.gz"
           ls -lh "$GITHUB_WORKSPACE/Tipzy-simulator.tar.gz"
 
-      # ── 8. Upload artifact ───────────────────────────────────────────────────
-      - name: Upload simulator build
-        uses: actions/upload-artifact@v4
-        with:
-          name: Tipzy-iOS-Simulator
-          path: Tipzy-simulator.tar.gz
-          retention-days: 7
+      # ── 8. Publish as GitHub Release (downloads as raw .tar.gz, no extra zip wrapper) ──
+      - name: Create GitHub Release with tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="simulator-build-${{ github.run_number }}"
+          gh release create "$TAG" \
+            --title "iOS Simulator Build #${{ github.run_number }}" \
+            --notes "Upload Tipzy-simulator.tar.gz directly to Appetize.io" \
+            "$GITHUB_WORKSPACE/Tipzy-simulator.tar.gz#Tipzy-simulator.tar.gz"
