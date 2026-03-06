@@ -25,6 +25,12 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
+      # ── 3.5 Write .env so EXPO_PUBLIC_ vars are baked into the JS bundle ──────
+      - name: Write production .env
+        run: |
+          echo "EXPO_PUBLIC_API_URL=https://tipzy-production.up.railway.app" >> .env
+          echo "EXPO_PUBLIC_RORK_API_BASE_URL=https://tipzy-production.up.railway.app" >> .env
+
       # ── 4. Prebuild (generate ios/ native project) ───────────────────────────
       - name: Expo Prebuild
         env:
@@ -47,6 +53,9 @@ jobs:
 
       # ── 6. Build for simulator ───────────────────────────────────────────────
       - name: Build iOS Simulator
+        env:
+          EXPO_PUBLIC_API_URL: https://tipzy-production.up.railway.app
+          EXPO_PUBLIC_RORK_API_BASE_URL: https://tipzy-production.up.railway.app
         run: |
           set -eo pipefail
           cd ios
