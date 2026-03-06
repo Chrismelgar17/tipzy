@@ -48,10 +48,17 @@ jobs:
         run: |
           set -eo pipefail
           cd ios
-          SCHEME=$(ls *.xcworkspace | head -1 | sed 's/\.xcworkspace//')
-          echo "Using scheme: $SCHEME"
+          # Find the top-level .xcworkspace (not inside Pods/)
+          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
+          if [ -z "$WORKSPACE" ]; then
+            echo "ERROR: No .xcworkspace found in ios/"
+            ls -la
+            exit 1
+          fi
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          echo "Using workspace: $WORKSPACE  scheme: $SCHEME"
           xcodebuild \
-            -workspace "$SCHEME.xcworkspace" \
+            -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphonesimulator \
