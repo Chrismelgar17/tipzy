@@ -1,0 +1,186 @@
+name: Build iOS IPA
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REQUIRED GitHub Repository Secrets (Settings → Secrets → Actions):
+#
+#   IOS_CERTIFICATE_BASE64        – base64 of your .p12 distribution certificate
+#                                   Generate with:
+#                                   base64 -i Certificates.p12 | pbcopy   (macOS)
+#
+#   IOS_CERTIFICATE_PASSWORD      – password you set when exporting the .p12
+#
+#   IOS_PROVISIONING_PROFILE_BASE64 – base64 of your .mobileprovision file
+#                                     base64 -i YourApp.mobileprovision | pbcopy
+#
+#   APPLE_TEAM_ID                 – your 10-char Apple Team ID (e.g. ABC123XYZ9)
+#
+# Distribution type is "ad-hoc" by default (install on registered devices).
+# Change EXPORT_METHOD below to "app-store" for TestFlight / App Store.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+
+env:
+  EXPORT_METHOD: ad-hoc          # ad-hoc | app-store | enterprise | development
+  BUNDLE_ID: com.tipzy.app       # must match your Apple provisioning profile
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js ───────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── 3. Install JS deps ───────────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      # ── 3.5 Bake production API URL into the JS bundle ───────────────────────
+      - name: Write production .env
+        run: |
+          echo "EXPO_PUBLIC_API_URL=https://tipzy-production.up.railway.app" >> .env
+          echo "EXPO_PUBLIC_RORK_API_BASE_URL=https://tipzy-production.up.railway.app" >> .env
+
+      # ── 4. Expo Prebuild ─────────────────────────────────────────────────────
+      - name: Expo Prebuild
+        env:
+          EXPO_PUBLIC_API_URL: https://tipzy-production.up.railway.app
+          EXPO_PUBLIC_RORK_API_BASE_URL: https://tipzy-production.up.railway.app
+        run: npx expo prebuild --platform ios --clean --non-interactive
+
+      # ── 5. CocoaPods ─────────────────────────────────────────────────────────
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: pods-${{ hashFiles('ios/Podfile') }}
+          restore-keys: pods-
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      # ── 6. Install Apple certificate & provisioning profile ──────────────────
+      - name: Install certificate and provisioning profile
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: tipzy-ci-keychain
+        run: |
+          set -eo pipefail
+
+          # Decode certificate
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+
+          # Decode provisioning profile
+          PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
+
+          # Create a temporary keychain
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate into keychain
+          security import "$CERT_PATH" \
+            -P "$IOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          # Install provisioning profile
+          PP_UUID=$(security cms -D -i "$PP_PATH" | \
+            plutil -extract UUID xml1 -o - - | \
+            sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
+          echo "Installed provisioning profile: $PP_UUID"
+
+      # ── 7. Archive ───────────────────────────────────────────────────────────
+      - name: Archive app
+        env:
+          EXPO_PUBLIC_API_URL: https://tipzy-production.up.railway.app
+          EXPO_PUBLIC_RORK_API_BASE_URL: https://tipzy-production.up.railway.app
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -eo pipefail
+          cd ios
+          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          echo "Archiving workspace: $WORKSPACE  scheme: $SCHEME"
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$GITHUB_WORKSPACE/Tipzy.xcarchive" \
+            -destination "generic/platform=iOS" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            ONLY_ACTIVE_ARCH=NO \
+            FORCE_BUNDLING=YES
+
+      # ── 8. Export IPA ────────────────────────────────────────────────────────
+      - name: Export IPA
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -eo pipefail
+
+          # Build ExportOptions.plist dynamically
+          cat > "$GITHUB_WORKSPACE/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>${EXPORT_METHOD}</string>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath "$GITHUB_WORKSPACE/Tipzy.xcarchive" \
+            -exportPath "$GITHUB_WORKSPACE/ipa_output" \
+            -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist"
+
+          # Rename to a friendly name
+          IPA=$(find "$GITHUB_WORKSPACE/ipa_output" -name "*.ipa" | head -1)
+          cp "$IPA" "$GITHUB_WORKSPACE/Tipzy.ipa"
+          echo "IPA ready: $GITHUB_WORKSPACE/Tipzy.ipa"
+          ls -lh "$GITHUB_WORKSPACE/Tipzy.ipa"
+
+      # ── 9. Publish as GitHub Release ─────────────────────────────────────────
+      - name: Create GitHub Release with IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="ipa-build-${{ github.run_number }}"
+          gh release create "$TAG" \
+            --title "iOS IPA Build #${{ github.run_number }} (${EXPORT_METHOD})" \
+            --notes "Ad-hoc IPA — install via Apple Configurator 2 or TestFlight (change EXPORT_METHOD to app-store for TestFlight)." \
+            "$GITHUB_WORKSPACE/Tipzy.ipa#Tipzy.ipa"
