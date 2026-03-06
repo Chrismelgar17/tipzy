@@ -59,17 +59,18 @@ jobs:
           fi
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
           echo "Using workspace: $WORKSPACE  scheme: $SCHEME"
-          # Use Debug config — Release strips symbols and can fail on Appetize simulator
+          # Release config embeds the JS bundle — Debug expects a live Metro packager (breaks Appetize)
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
-            -configuration Debug \
+            -configuration Release \
             -sdk iphonesimulator \
             -derivedDataPath "$GITHUB_WORKSPACE/derived_data" \
             -destination "generic/platform=iOS Simulator" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
             ONLY_ACTIVE_ARCH=NO \
+            FORCE_BUNDLING=YES \
             build
 
       # ── 7. Package as .tar.gz for Appetize.io ─────────────────────────────────
