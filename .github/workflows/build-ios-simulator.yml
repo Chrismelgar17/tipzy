@@ -35,7 +35,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ios/Pods
-          key: pods-${{ hashFiles('ios/Podfile.lock') }}
+          key: pods-${{ hashFiles('ios/Podfile') }}
           restore-keys: pods-
 
       - name: Install CocoaPods
@@ -46,38 +46,39 @@ jobs:
       # ── 6. Build for simulator ───────────────────────────────────────────────
       - name: Build iOS Simulator
         run: |
+          set -eo pipefail
           cd ios
-          SCHEME=$(ls *.xcworkspace | head -1 | sed 's/.xcworkspace//')
+          SCHEME=$(ls *.xcworkspace | head -1 | sed 's/\.xcworkspace//')
           echo "Using scheme: $SCHEME"
           xcodebuild \
             -workspace "$SCHEME.xcworkspace" \
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphonesimulator \
-            -derivedDataPath build \
-            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$GITHUB_WORKSPACE/derived_data" \
+            -destination "generic/platform=iOS Simulator" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
-            | xcpretty --color || xcodebuild \
-            -workspace "$SCHEME.xcworkspace" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphonesimulator \
-            -derivedDataPath build \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_IDENTITY=""
+            ONLY_ACTIVE_ARCH=NO \
+            build
 
       # ── 7. Package as tar.gz for Appetize.io ────────────────────────────────
       - name: Package .app as tar.gz
         run: |
-          APP_PATH=$(find ios/build/Build/Products -name "*.app" -maxdepth 3 | head -1)
+          set -eo pipefail
+          echo "Searching for .app in derived_data..."
+          find "$GITHUB_WORKSPACE/derived_data" -name "*.app" -type d 2>/dev/null || true
+          APP_PATH=$(find "$GITHUB_WORKSPACE/derived_data/Build/Products" -name "*.app" -type d | grep -v "\.appex" | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app found. Build may have failed."
+            find "$GITHUB_WORKSPACE/derived_data" -type d -name "Products" 2>/dev/null || true
+            exit 1
+          fi
           echo "Found app at: $APP_PATH"
-          APP_DIR=$(dirname "$APP_PATH")
-          APP_NAME=$(basename "$APP_PATH")
-          cd "$APP_DIR"
-          tar -czf "$GITHUB_WORKSPACE/Tipzy-simulator.tar.gz" "$APP_NAME"
+          cd "$(dirname "$APP_PATH")"
+          tar -czf "$GITHUB_WORKSPACE/Tipzy-simulator.tar.gz" "$(basename "$APP_PATH")"
           echo "Created Tipzy-simulator.tar.gz"
+          ls -lh "$GITHUB_WORKSPACE/Tipzy-simulator.tar.gz"
 
       # ── 8. Upload artifact ───────────────────────────────────────────────────
       - name: Upload simulator build
