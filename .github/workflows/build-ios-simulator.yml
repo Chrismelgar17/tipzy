@@ -57,10 +57,11 @@ jobs:
           fi
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
           echo "Using workspace: $WORKSPACE  scheme: $SCHEME"
+          # Use Debug config — Release strips symbols and can fail on Appetize simulator
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
-            -configuration Release \
+            -configuration Debug \
             -sdk iphonesimulator \
             -derivedDataPath "$GITHUB_WORKSPACE/derived_data" \
             -destination "generic/platform=iOS Simulator" \
@@ -69,28 +70,28 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             build
 
-      # ── 7. Package as tar.gz for Appetize.io ────────────────────────────────
-      - name: Package .app as tar.gz
+      # ── 7. Package as .zip for Appetize.io ──────────────────────────────────
+      - name: Package .app as zip
         run: |
           set -eo pipefail
           echo "Searching for .app in derived_data..."
           find "$GITHUB_WORKSPACE/derived_data" -name "*.app" -type d 2>/dev/null || true
           APP_PATH=$(find "$GITHUB_WORKSPACE/derived_data/Build/Products" -name "*.app" -type d | grep -v "\.appex" | head -1)
           if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app found. Build may have failed."
-            find "$GITHUB_WORKSPACE/derived_data" -type d -name "Products" 2>/dev/null || true
+            echo "ERROR: No .app found."
             exit 1
           fi
           echo "Found app at: $APP_PATH"
           cd "$(dirname "$APP_PATH")"
-          tar -czf "$GITHUB_WORKSPACE/Tipzy-simulator.tar.gz" "$(basename "$APP_PATH")"
-          echo "Created Tipzy-simulator.tar.gz"
-          ls -lh "$GITHUB_WORKSPACE/Tipzy-simulator.tar.gz"
+          # Appetize accepts both .zip and .tar.gz — .zip is most reliable
+          zip -r "$GITHUB_WORKSPACE/Tipzy-simulator.zip" "$(basename "$APP_PATH")"
+          echo "Created Tipzy-simulator.zip"
+          ls -lh "$GITHUB_WORKSPACE/Tipzy-simulator.zip"
 
       # ── 8. Upload artifact ───────────────────────────────────────────────────
       - name: Upload simulator build
         uses: actions/upload-artifact@v4
         with:
           name: Tipzy-iOS-Simulator
-          path: Tipzy-simulator.tar.gz
+          path: Tipzy-simulator.zip
           retention-days: 7
