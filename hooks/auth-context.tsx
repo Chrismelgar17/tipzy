@@ -284,7 +284,11 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
       setPendingVerificationEmail(null);
       setVerificationToken(null);
       setVerificationPreviewUrl(null);
-      router.replace(routeForRole(appUser.role as UserRole, appUser.businessStatus) as any);
+      // Defer navigation so React commits state (setUser/setRole) before the
+      // destination screen mounts — prevents race conditions on the tabs layout.
+      setTimeout(() => {
+        router.replace(routeForRole(appUser.role as UserRole, appUser.businessStatus) as any);
+      }, 50);
     } catch (error: any) {
       const message = error?.message?.toLowerCase?.() || '';
       if (message.includes('verify')) {

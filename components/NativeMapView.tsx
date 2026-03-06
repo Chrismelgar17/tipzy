@@ -256,8 +256,7 @@ function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocatio
         rotateEnabled={false}
         scrollEnabled
         zoomEnabled
-        minZoomLevel={12}
-        maxZoomLevel={18}
+        {...(Platform.OS === 'android' ? { minZoomLevel: 12, maxZoomLevel: 18 } : {})}
       >
         {/* Custom user location marker */}
         {userLocation && (
