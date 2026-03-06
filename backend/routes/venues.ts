@@ -77,13 +77,20 @@ venues.get("/", async (c) => {
 // GET /api/venues/offers – all active offers from approved venues (public)
 venues.get("/offers", async (c) => {
   const res = await query<DbOffer & { venue_name: string; venue_photos: any }>(
-    `SELECT o.*, v.name AS venue_name, v.photos AS venue_photos
+    `SELECT o.*, v.name AS venue_name, v.photos AS venue_photos,
+            COALESCE(o.sponsor_status, 'none') AS sponsor_status,
+            o.sponsored_until
      FROM offers o
      JOIN venues v ON v.id = o.venue_id
      WHERE o.status = 'active'
        AND v.status = 'approved'
        AND (o.end_date IS NULL OR o.end_date >= CURRENT_DATE)
-     ORDER BY o.created_at DESC
+     ORDER BY
+       -- sponsored offers first (active sponsorship)
+       CASE WHEN COALESCE(o.sponsor_status,'none') = 'approved'
+                 AND (o.sponsored_until IS NULL OR o.sponsored_until > now())
+            THEN 0 ELSE 1 END ASC,
+       o.created_at DESC
      LIMIT 50`,
   );
   const getFirstPhoto = (raw: any): string => {
@@ -92,17 +99,23 @@ venues.get("/offers", async (c) => {
       return Array.isArray(arr) && arr.length > 0 ? arr[0] : "";
     } catch { return ""; }
   };
-  const offers = res.rows.map(o => ({
-    id: o.id,
-    venueId: o.venue_id,
-    venueName: o.venue_name,
-    title: o.name,
-    description: o.description ?? "",
-    discount: o.discount,
-    image: getFirstPhoto(o.venue_photos),
-    validUntil: o.end_date ?? null,
-    isActive: true,
-  }));
+  const offers = res.rows.map(o => {
+    const isSponsored =
+      (o as any).sponsor_status === "approved" &&
+      (!(o as any).sponsored_until || new Date((o as any).sponsored_until) > new Date());
+    return {
+      id: o.id,
+      venueId: o.venue_id,
+      venueName: o.venue_name,
+      title: o.name,
+      description: o.description ?? "",
+      discount: o.discount,
+      image: getFirstPhoto(o.venue_photos),
+      validUntil: o.end_date ?? null,
+      isActive: true,
+      isSponsored,
+    };
+  });
   return c.json({ offers });
 });
 

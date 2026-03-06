@@ -18,6 +18,7 @@ import {
   Percent,
   MoreVertical,
   Plus,
+  Zap,
 } from 'lucide-react-native';
 import api from '@/lib/api';
 
@@ -31,6 +32,8 @@ interface Offer {
   status: 'pending' | 'active' | 'suspended' | 'rejected';
   description: string | null;
   created_at: string;
+  sponsor_status?: string | null;
+  sponsored_until?: string | null;
 }
 
 type TabType = 'pending' | 'active' | 'suspended' | 'rejected';
@@ -107,8 +110,7 @@ export default function OffersScreen() {
   const handleDelete = (offer: Offer) => {
     Alert.alert(
       'Delete Offer',
-      `Delete "${offer.name}"? This cannot be undone.`,
-      [
+      `Delete "${offer.name}"? This cannot be undone.`,      [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
@@ -126,8 +128,31 @@ export default function OffersScreen() {
     );
   };
 
-  const handleMoreOptions = (offer: Offer) => {
-    if (offer.status === 'pending' || offer.status === 'rejected') {
+  const handleRequestSponsor = (offer: Offer) => {
+    Alert.alert(
+      '⭐ Boost on Home Page',
+      `Submit "${offer.name}" for homepage sponsorship?\n\nJaber will review and approve within 24 hours. If approved, your offer will be featured at the top of the Tipzy home page for 3 days.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Request Sponsorship',
+          onPress: async () => {
+            try {
+              await api.post(`/business/offers/${offer.id}/request-sponsor`);
+              setOffers(prev =>
+                prev.map(o => o.id === offer.id ? { ...o, sponsor_status: 'pending' } : o),
+              );
+              Alert.alert('✅ Request Submitted', 'Your sponsorship request has been sent to Jaber for review.');
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.error ?? 'Could not submit sponsorship request.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleMoreOptions = (offer: Offer) => {    if (offer.status === 'pending' || offer.status === 'rejected') {
       Alert.alert(offer.name, 'What would you like to do?', [
         { text: 'Delete', style: 'destructive', onPress: () => handleDelete(offer) },
         { text: 'Cancel', style: 'cancel' },
@@ -186,6 +211,39 @@ export default function OffersScreen() {
           <Text style={styles.venueName}>{item.venue_name}</Text>
         ) : null}
       </View>
+
+      {/* Sponsor row — only shown for active offers */}
+      {item.status === 'active' && (
+        <View style={styles.sponsorRow}>
+          {(!item.sponsor_status || item.sponsor_status === 'none') && (
+            <TouchableOpacity
+              style={styles.boostBtn}
+              onPress={() => handleRequestSponsor(item)}
+            >
+              <Zap size={14} color="#F59E0B" />
+              <Text style={styles.boostBtnText}>Boost on Home Page</Text>
+            </TouchableOpacity>
+          )}
+          {item.sponsor_status === 'pending' && (
+            <View style={styles.sponsorBadge}>
+              <Text style={styles.sponsorBadgeText}>⏳ Sponsorship in Review</Text>
+            </View>
+          )}
+          {item.sponsor_status === 'approved' && (
+            <View style={[styles.sponsorBadge, styles.sponsorBadgeApproved]}>
+              <Text style={[styles.sponsorBadgeText, { color: '#F59E0B' }]}>⭐ Featured on Home Page</Text>
+            </View>
+          )}
+          {item.sponsor_status === 'rejected' && (
+            <TouchableOpacity
+              style={[styles.sponsorBadge, styles.sponsorBadgeRejected]}
+              onPress={() => handleRequestSponsor({ ...item, sponsor_status: 'none' })}
+            >
+              <Text style={[styles.sponsorBadgeText, { color: '#EF4444' }]}>❌ Sponsor Rejected — Try Again</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </View>
   );
 
@@ -357,6 +415,51 @@ export default function OffersScreen() {
       justifyContent: 'center',
       alignItems: 'center',
       paddingVertical: theme.spacing.xxl,
+    },
+    sponsorRow: {
+      marginTop: theme.spacing.md,
+      paddingTop: theme.spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    boostBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 20,
+      backgroundColor: 'rgba(245,158,11,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(245,158,11,0.4)',
+    },
+    boostBtnText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#F59E0B',
+    },
+    sponsorBadge: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      backgroundColor: 'rgba(156,163,175,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(156,163,175,0.25)',
+    },
+    sponsorBadgeApproved: {
+      backgroundColor: 'rgba(245,158,11,0.10)',
+      borderColor: 'rgba(245,158,11,0.4)',
+    },
+    sponsorBadgeRejected: {
+      backgroundColor: 'rgba(239,68,68,0.08)',
+      borderColor: 'rgba(239,68,68,0.3)',
+    },
+    sponsorBadgeText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#9CA3AF',
     },
   });
 

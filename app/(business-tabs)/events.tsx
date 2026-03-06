@@ -21,6 +21,7 @@ import {
   Trash2,
   Pencil,
   X,
+  ChevronLeft,
   ChevronRight,
   CalendarDays,
 } from 'lucide-react-native';
@@ -75,6 +76,10 @@ export default function EventsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [venueId, setVenueId] = useState<string | null>(null);
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
+  const [selectedDay, setSelectedDay] = useState<{ year: number; month: number; day: number } | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() };
+  });
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -213,9 +218,110 @@ export default function EventsScreen() {
     );
   };
 
-  const filtered = events.filter(e =>
-    tab === 'upcoming' ? isUpcoming(e.event_date) : !isUpcoming(e.event_date),
+  const filtered = events
+    .filter(e => tab === 'upcoming' ? isUpcoming(e.event_date) : !isUpcoming(e.event_date))
+    .filter(e => {
+      if (!selectedDay) return true;
+      const d = new Date(e.event_date);
+      return (
+        d.getFullYear() === selectedDay.year &&
+        d.getMonth()    === selectedDay.month &&
+        d.getDate()     === selectedDay.day
+      );
+    });
+
+  // ── calendar helpers ─────────────────────────────────────────────────────────
+  const DAYS_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  /** set of YYYY-MM-DD strings for events in current month's tab */
+  const eventDates = new Set(
+    events
+      .filter(e => tab === 'upcoming' ? isUpcoming(e.event_date) : !isUpcoming(e.event_date))
+      .map(e => e.event_date?.slice(0, 10))
   );
+
+  const prevMonth = () => setCalendarMonth(prev => {
+    if (prev.month === 0) return { year: prev.year - 1, month: 11 };
+    return { year: prev.year, month: prev.month - 1 };
+  });
+  const nextMonth = () => setCalendarMonth(prev => {
+    if (prev.month === 11) return { year: prev.year + 1, month: 0 };
+    return { year: prev.year, month: prev.month + 1 };
+  });
+
+  const renderCalendar = () => {
+    const { year, month } = calendarMonth;
+    const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    // Build blank + day cells
+    const cells: (number | null)[] = Array(firstDay).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    // Pad to multiple of 7
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const today = new Date();
+    const todayKey = today.getFullYear() === year && today.getMonth() === month ? today.getDate() : -1;
+
+    return (
+      <View style={s.calendarBox}>
+        {/* Month navigator */}
+        <View style={s.calNavRow}>
+          <TouchableOpacity onPress={prevMonth} style={s.calNavBtn}>
+            <ChevronLeft size={20} color={theme.colors.text.secondary} />
+          </TouchableOpacity>
+          <Text style={s.calMonthLabel}>{MONTHS[month]} {year}</Text>
+          <TouchableOpacity onPress={nextMonth} style={s.calNavBtn}>
+            <ChevronRight size={20} color={theme.colors.text.secondary} />
+          </TouchableOpacity>
+        </View>
+        {/* Day-of-week headers */}
+        <View style={s.calWeekRow}>
+          {DAYS_SHORT.map((d, i) => (
+            <Text key={i} style={s.calDayHeader}>{d}</Text>
+          ))}
+        </View>
+        {/* Day cells */}
+        <View style={s.calGrid}>
+          {cells.map((day, idx) => {
+            if (!day) return <View key={`empty-${idx}`} style={s.calCell} />;
+            const isoStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const hasEvent = eventDates.has(isoStr);
+            const isToday = day === todayKey;
+            const isSelected =
+              selectedDay?.year === year &&
+              selectedDay?.month === month &&
+              selectedDay?.day === day;
+            return (
+              <TouchableOpacity
+                key={day}
+                style={[s.calCell, isSelected && s.calCellSelected]}
+                onPress={() => setSelectedDay(isSelected ? null : { year, month, day })}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  s.calDayNum,
+                  isToday && s.calDayToday,
+                  isSelected && s.calDaySelected,
+                ]}>{day}</Text>
+                {hasEvent && (
+                  <View style={[s.calDot, isSelected && s.calDotSelected]} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {selectedDay && (
+          <TouchableOpacity
+            style={s.calClearBtn}
+            onPress={() => setSelectedDay(null)}
+          >
+            <Text style={s.calClearBtnText}>Show all events</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
 
   const renderEmpty = () => (
     <View style={s.emptyContainer}>
@@ -244,6 +350,9 @@ export default function EventsScreen() {
           <Text style={[s.tabBtnText, tab === 'past' && s.tabBtnTextActive]}>Past</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Calendar grid */}
+      {renderCalendar()}
 
       {loading ? (
         <View style={s.loadingContainer}>
@@ -601,6 +710,98 @@ function makeStyles(theme: any) {
       color: '#fff',
       fontSize: 16,
       fontWeight: '700',
+    },
+    // ── Calendar styles ───────────────────────────────────────────────────────
+    calendarBox: {
+      backgroundColor: theme.colors.card,
+      marginHorizontal: 16,
+      marginBottom: 8,
+      marginTop: 4,
+      borderRadius: 16,
+      paddingHorizontal: 12,
+      paddingTop: 14,
+      paddingBottom: 10,
+    },
+    calNavRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    calNavBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: theme.colors.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    calMonthLabel: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.colors.text.primary,
+    },
+    calWeekRow: {
+      flexDirection: 'row',
+      marginBottom: 4,
+    },
+    calDayHeader: {
+      flex: 1,
+      textAlign: 'center',
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.colors.text.tertiary,
+      paddingVertical: 4,
+    },
+    calGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+    calCell: {
+      width: `${100 / 7}%` as any,
+      aspectRatio: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 8,
+    },
+    calCellSelected: {
+      backgroundColor: theme.colors.purple,
+    },
+    calDayNum: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: theme.colors.text.secondary,
+    },
+    calDayToday: {
+      color: theme.colors.purple,
+      fontWeight: '800',
+    },
+    calDaySelected: {
+      color: '#fff',
+      fontWeight: '800',
+    },
+    calDot: {
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: theme.colors.purple,
+      marginTop: 2,
+    },
+    calDotSelected: {
+      backgroundColor: 'rgba(255,255,255,0.8)',
+    },
+    calClearBtn: {
+      alignSelf: 'center',
+      marginTop: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 5,
+      borderRadius: 20,
+      backgroundColor: theme.colors.background,
+    },
+    calClearBtnText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.text.tertiary,
     },
   });
 }

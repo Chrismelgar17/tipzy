@@ -42,6 +42,7 @@ export default function AddScreen() {
   const { theme } = useTheme();
   const [createType, setCreateType] = useState<CreateType>(null);
   const [venueId, setVenueId] = useState<string | null>(null);
+  const [ownedVenues, setOwnedVenues] = useState<Array<{ id: string; name: string }>>([]);
   const [loadingVenue, setLoadingVenue] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -52,7 +53,8 @@ export default function AddScreen() {
     (async () => {
       try {
         const res = await api.get('/business/venues');
-        const venues = res.data?.venues ?? [];
+        const venues: Array<{ id: string; name: string }> = res.data?.venues ?? [];
+        setOwnedVenues(venues);
         if (venues.length > 0) setVenueId(venues[0].id);
       } catch (err) {
         console.warn('[AddScreen] Could not fetch venues:', err);
@@ -261,6 +263,12 @@ export default function AddScreen() {
     secondaryButtonText: { color: theme.colors.text.primary },
     loadingContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: theme.spacing.xxl, gap: theme.spacing.md },
     loadingText: { fontSize: 14, color: theme.colors.text.secondary },
+    venuePicker: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+    venuePickerContent: { gap: theme.spacing.sm },
+    venuePill: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, borderRadius: theme.borderRadius.full, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border },
+    venuePillActive: { backgroundColor: theme.colors.purple, borderColor: theme.colors.purple },
+    venuePillText: { fontSize: 14, fontWeight: '500', color: theme.colors.text.secondary },
+    venuePillTextActive: { color: theme.colors.white, fontWeight: '600' as const },
   });
 
   return (
@@ -271,6 +279,29 @@ export default function AddScreen() {
           <X size={24} color={theme.colors.text.primary} />
         </TouchableOpacity>
       </View>
+      {ownedVenues.length > 1 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.venuePicker}
+          contentContainerStyle={styles.venuePickerContent}
+        >
+          {ownedVenues.map((v) => {
+            const isActive = v.id === venueId;
+            return (
+              <TouchableOpacity
+                key={v.id}
+                style={[styles.venuePill, isActive && styles.venuePillActive]}
+                onPress={() => setVenueId(v.id)}
+              >
+                <Text style={[styles.venuePillText, isActive && styles.venuePillTextActive]}>
+                  {v.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
         <View style={styles.scrollContent}>{renderContent()}</View>
       </ScrollView>

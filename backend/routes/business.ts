@@ -37,8 +37,10 @@ import {
   sendOfferApprovalRequestEmail,
   sendOfferApprovedEmail,
   sendOfferRejectedEmail,
+  sendSponsorRequestEmail,
   type BusinessApprovalData,
   type OfferApprovalData,
+  type SponsorRequestData,
 } from "../email";
 
 const business = new Hono();
@@ -515,18 +517,33 @@ business.patch("/orders/:id/status", requireAuth, requireRole("business", "admin
 business.get("/dashboard", requireAuth, requireRole("business", "admin"), async (c) => {
   const userId = (c as any).get("userId");
   const userRole = (c as any).get("role");
+  const { venueId: requestedVenueId } = c.req.query() as { venueId?: string };
 
-  // Get first owned venue (or all for admin)
-  const venueFilter = userRole === "admin"
-    ? ""
-    : "WHERE owner_user_id = $1";
-  const venueParams = userRole === "admin" ? [] : [userId];
+  // If a specific venueId is requested, verify the caller owns it
+  let venueRow: { id: string; current_count: number; capacity: number } | null = null;
+  if (requestedVenueId) {
+    const check = await assertVenueOwner(userId, userRole, requestedVenueId);
+    if (check === "ok") {
+      const r = await query<{ id: string; current_count: number; capacity: number }>(
+        "SELECT id, current_count, capacity FROM venues WHERE id = $1",
+        [requestedVenueId],
+      );
+      venueRow = r.rows[0] ?? null;
+    }
+  }
 
-  const venueRes = await query<{ id: string; current_count: number; capacity: number }>(
-    `SELECT id, current_count, capacity FROM venues ${venueFilter} LIMIT 1`,
-    venueParams,
-  );
-  const venue = venueRes.rows[0];
+  // Fall back to the first owned venue when no valid venueId supplied
+  if (!venueRow) {
+    const venueFilter = userRole === "admin" ? "" : "WHERE owner_user_id = $1";
+    const venueParams = userRole === "admin" ? [] : [userId];
+    const venueRes = await query<{ id: string; current_count: number; capacity: number }>(
+      `SELECT id, current_count, capacity FROM venues ${venueFilter} ORDER BY created_at ASC LIMIT 1`,
+      venueParams,
+    );
+    venueRow = venueRes.rows[0] ?? null;
+  }
+
+  const venue = venueRow;
   if (!venue) {
     return c.json({
       venueId: null, totalOrdersToday: 0, revenueToday: 0,
@@ -835,6 +852,64 @@ business.delete("/events/:id", requireAuth, requireRole("business", "admin"), as
 
   await query("DELETE FROM events WHERE id = $1", [eventId]);
   return c.json({ message: "Event deleted" });
+});
+
+// POST /api/business/offers/:id/request-sponsor – request homepage sponsorship for an active offer
+business.post("/offers/:id/request-sponsor", requireAuth, requireRole("business", "admin"), async (c) => {
+  const userId = (c as any).get("userId") as string;
+  const offerId = c.req.param("id");
+
+  const offerRes = await query<{
+    id: string; name: string; discount: number; status: string;
+    owner_user_id: string; venue_id: string; sponsor_status: string;
+    venue_name: string; owner_name: string; owner_email: string;
+  }>(
+    `SELECT o.id, o.name, o.discount, o.status, o.owner_user_id, o.venue_id,
+            COALESCE(o.sponsor_status, 'none') AS sponsor_status,
+            v.name AS venue_name, u.name AS owner_name, u.email AS owner_email
+     FROM offers o
+     JOIN venues v ON v.id = o.venue_id
+     JOIN users  u ON u.id = o.owner_user_id
+     WHERE o.id = $1`,
+    [offerId],
+  );
+  const offer = offerRes.rows[0];
+  if (!offer) return c.json({ error: "Offer not found" }, 404);
+  if (offer.owner_user_id !== userId) return c.json({ error: "Forbidden" }, 403);
+  if (offer.status !== "active") return c.json({ error: "Only active offers can request sponsorship" }, 400);
+  if (offer.sponsor_status === "pending") return c.json({ error: "Sponsorship already pending review" }, 409);
+  if (offer.sponsor_status === "approved") return c.json({ error: "Offer is already sponsored" }, 409);
+
+  // Mark as pending
+  await query("UPDATE offers SET sponsor_status = 'pending', updated_at = now() WHERE id = $1", [offerId]);
+
+  // Generate approve + reject tokens
+  const approveToken = crypto.randomUUID?.() ?? `spon_${Date.now()}_a`;
+  const rejectToken  = crypto.randomUUID?.() ?? `spon_${Date.now()}_r`;
+  await query(
+    "INSERT INTO offer_sponsor_tokens (token, offer_id, action) VALUES ($1,$2,'approve'),($3,$4,'reject')",
+    [approveToken, offerId, rejectToken, offerId],
+  );
+
+  const adminEmail = process.env.MAIL_FROM ?? "admin@tipzy.app";
+  const apiBase = process.env.API_BASE_URL ?? process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+  const sponsorData: SponsorRequestData = {
+    offerId,
+    offerName:  offer.name,
+    venueName:  offer.venue_name,
+    ownerName:  offer.owner_name,
+    ownerEmail: offer.owner_email,
+    discount:   offer.discount,
+    approveUrl: `${apiBase}/api/admin/approve-sponsor/${approveToken}`,
+    rejectUrl:  `${apiBase}/api/admin/approve-sponsor/${rejectToken}`,
+  };
+  try {
+    await sendSponsorRequestEmail(adminEmail, sponsorData);
+  } catch (emailErr) {
+    console.error("[business/request-sponsor] Failed to send sponsor email:", emailErr);
+  }
+
+  return c.json({ message: "Sponsorship request submitted. Jaber will review your request shortly." });
 });
 
 // POST /api/business/venues/add – add an additional venue under the same owner account

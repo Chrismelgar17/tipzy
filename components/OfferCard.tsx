@@ -28,12 +28,13 @@ interface Offer {
 interface OfferCardProps {
   offer: Offer;
   onPress: () => void;
+  isSponsored?: boolean;
 }
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.75;
 
-export const OfferCard: React.FC<OfferCardProps> = ({ offer, onPress }) => {
+export const OfferCard: React.FC<OfferCardProps> = ({ offer, onPress, isSponsored }) => {
   const handlePress = () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -61,6 +62,12 @@ export const OfferCard: React.FC<OfferCardProps> = ({ offer, onPress }) => {
             <Percent size={16} color={theme.colors.white} />
             <Text style={styles.discountText}>{offer.discount}% OFF</Text>
           </View>
+
+          {isSponsored && (
+            <View style={styles.sponsoredBadge}>
+              <Text style={styles.sponsoredText}>⭐ Sponsored</Text>
+            </View>
+          )}
           
           <View style={styles.content}>
             <Text style={styles.title} numberOfLines={2}>{offer.title}</Text>
@@ -131,5 +138,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.colors.text.secondary,
     lineHeight: 16,
+  },
+  sponsoredBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(245,158,11,0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  sponsoredText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1F2937',
+    letterSpacing: 0.3,
   },
 });

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Mail, Lock, X, Sparkles, Phone, Calendar, CheckSquare, Square, Chrome, Apple } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
 import * as Haptics from 'expo-haptics';
@@ -36,7 +37,33 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
   const [name, setName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
+  const [dobDate, setDobDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
+
+  const formatDateForDisplay = (date: Date): string => {
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = String(date.getFullYear());
+    return `${month}/${day}/${year}`;
+  };
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (selectedDate) {
+      setDobDate(selectedDate);
+      setDateOfBirth(formatDateForDisplay(selectedDate));
+    }
+  };
+
+  const openDatePicker = () => setShowDatePicker(true);
+  const closeDatePicker = () => setShowDatePicker(false);
+  const confirmDateSelection = () => {
+    if (dobDate) setDateOfBirth(formatDateForDisplay(dobDate));
+    setShowDatePicker(false);
+  };
 
   const handleGoogleSignIn = async () => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -123,7 +150,7 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
     }
 
     // Validate age
-    const dob = new Date(dateOfBirth);
+    const dob = dobDate ?? new Date(dateOfBirth);
     const age = new Date().getFullYear() - dob.getFullYear();
     if (age < 18) {
       Alert.alert('Error', 'You must be at least 18 years old to create an account');
@@ -136,7 +163,7 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
 
     setIsLoading(true);
     try {
-      const dob = new Date(dateOfBirth);
+      const dob = dobDate ?? new Date(dateOfBirth);
       await signUp(email, password, name, dob);
       onClose();
       resetForm();
@@ -153,6 +180,8 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
     setName('');
     setConfirmPassword('');
     setDateOfBirth('');
+    setDobDate(null);
+    setShowDatePicker(false);
     setAgeConfirmed(false);
     setIsSignUp(false);
   };
@@ -268,17 +297,12 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
               )}
 
               {isSignUp && (
-                <View style={styles.inputContainer}>
+                <TouchableOpacity style={styles.inputContainer} onPress={openDatePicker}>
                   <Calendar size={20} color={theme.colors.text.tertiary} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Date of Birth (YYYY-MM-DD)"
-                    placeholderTextColor={theme.colors.text.tertiary}
-                    value={dateOfBirth}
-                    onChangeText={setDateOfBirth}
-                    testID="dob-input"
-                  />
-                </View>
+                  <Text style={[styles.input, { paddingVertical: 18 }, !dateOfBirth && { color: theme.colors.text.tertiary }]}>
+                    {dateOfBirth || 'Select your date of birth'}
+                  </Text>
+                </TouchableOpacity>
               )}
 
               {isSignUp && (
@@ -382,6 +406,45 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Date of Birth Picker */}
+      {Platform.OS === 'ios' ? (
+        <Modal visible={showDatePicker} transparent={true} animationType="slide">
+          <View style={styles.dobModalOverlay}>
+            <View style={styles.dobModalContent}>
+              <View style={styles.dobModalHeader}>
+                <TouchableOpacity onPress={closeDatePicker}>
+                  <Text style={styles.dobModalButton}>Cancel</Text>
+                </TouchableOpacity>
+                <Text style={styles.dobModalTitle}>Date of Birth</Text>
+                <TouchableOpacity onPress={confirmDateSelection}>
+                  <Text style={[styles.dobModalButton, styles.dobModalConfirm]}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={dobDate || new Date(2000, 0, 1)}
+                mode="date"
+                display="spinner"
+                onChange={handleDateChange}
+                maximumDate={new Date()}
+                minimumDate={new Date(1900, 0, 1)}
+                textColor="#FFFFFF"
+              />
+            </View>
+          </View>
+        </Modal>
+      ) : (
+        showDatePicker && (
+          <DateTimePicker
+            value={dobDate || new Date(2000, 0, 1)}
+            mode="date"
+            display="default"
+            onChange={handleDateChange}
+            maximumDate={new Date()}
+            minimumDate={new Date(1900, 0, 1)}
+          />
+        )
+      )}
     </Modal>
   );
 }
@@ -547,5 +610,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     marginTop: theme.spacing.lg,
+  },
+  dobModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  dobModalContent: {
+    backgroundColor: theme.colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 34,
+  },
+  dobModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  dobModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+  },
+  dobModalButton: {
+    fontSize: 16,
+    color: theme.colors.text.secondary,
+    paddingHorizontal: 4,
+  },
+  dobModalConfirm: {
+    color: theme.colors.purple,
+    fontWeight: '600',
   },
 });

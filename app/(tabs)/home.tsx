@@ -35,6 +35,7 @@ interface ApiOffer {
   image: string;
   validUntil: string | null;
   isActive: boolean;
+  isSponsored?: boolean;
 }
 
 type SortOption = 'busiest' | 'nearby' | 'top-rated' | 'open-now';
@@ -166,19 +167,33 @@ export default function HomeScreen() {
     const featured = nearbyVenues
       .filter(venue => venue.featuredRank && venue.featuredRank > 0)
       .sort((a, b) => (a.featuredRank || 0) - (b.featuredRank || 0));
-    // Fall back to first 6 venues if none are marked featured
-    if (featured.length === 0) return nearbyVenues.slice(0, 6);
-    return featured;
+    // Fall back to first 6 venues sorted by distance
+    if (featured.length === 0) {
+      return [...nearbyVenues]
+        .sort((a, b) => (a.distance ?? 9999) - (b.distance ?? 9999))
+        .slice(0, 6);
+    }
+    return featured.slice(0, 6);
+  };
+
+  const getNearestVenues = () => {
+    return [...nearbyVenues]
+      .filter(v => v.distance != null)
+      .sort((a, b) => (a.distance ?? 9999) - (b.distance ?? 9999))
+      .slice(0, 8);
   };
 
   const getPlacesYoullLike = () => {
-    // Show top-rated venues; if none have ratings show highest crowd count
+    // Show top-rated venues closest first; if none have ratings show highest crowd count
     const rated = nearbyVenues.filter(v => (v.rating ?? 0) > 0);
     if (rated.length > 0) {
-      return rated.sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 6);
+      return rated
+        .sort((a, b) => (b.rating || 0) - (a.rating || 0) || (a.distance ?? 9999) - (b.distance ?? 9999))
+        .slice(0, 6);
     }
-    // Fallback: sort by crowd count
-    return [...nearbyVenues].sort((a, b) => (b.currentCount || 0) - (a.currentCount || 0)).slice(0, 6);
+    return [...nearbyVenues]
+      .sort((a, b) => (b.currentCount || 0) - (a.currentCount || 0) || (a.distance ?? 9999) - (b.distance ?? 9999))
+      .slice(0, 6);
   };
 
   const getMostViewed = () => {
@@ -186,15 +201,17 @@ export default function HomeScreen() {
       .sort((a, b) => {
         const scoreA = (a.currentCount || 0) * 0.6 + (a.rating || 0) * 0.4;
         const scoreB = (b.currentCount || 0) * 0.6 + (b.rating || 0) * 0.4;
-        return scoreB - scoreA;
+        return scoreB - scoreA || (a.distance ?? 9999) - (b.distance ?? 9999);
       })
       .slice(0, 6);
   };
 
   const getRecentlyViewed = () => {
-    // Show last-added venues (newest first)
     return [...nearbyVenues]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() ||
+        (a.distance ?? 9999) - (b.distance ?? 9999),
+      )
       .slice(0, 5);
   };
 
@@ -321,7 +338,35 @@ export default function HomeScreen() {
           </View>
         ) : (
           <>
-            {/* Featured Offers Section */}
+            {/* Nearest to You – always first when location is known */}
+            {getNearestVenues().length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { marginHorizontal: 0, marginBottom: 0 }]}>Nearest to You</Text>
+                  {userLocation && (
+                    <View style={styles.locationBadge}>
+                      <MapPin size={12} color={theme.colors.purple} />
+                      <Text style={styles.locationBadgeText}>By distance</Text>
+                    </View>
+                  )}
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.venuesContainer}
+                >
+                  {getNearestVenues().map((venue) => (
+                    <SquareVenueCard
+                      key={venue.id}
+                      venue={venue}
+                      onPress={() => handleVenuePress(venue.id)}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Featured Offers Section */}}
             {offers.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Featured Offers</Text>
@@ -334,6 +379,7 @@ export default function HomeScreen() {
                     <OfferCard
                       key={offer.id}
                       offer={offer as any}
+                      isSponsored={offer.isSponsored}
                       onPress={() => handleOfferPress(offer.id)}
                     />
                   ))}
@@ -527,6 +573,29 @@ const styles = StyleSheet.create({
   },
   section: {
     marginTop: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: `${theme.colors.purple}18`,
+    borderWidth: 1,
+    borderColor: `${theme.colors.purple}40`,
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  locationBadgeText: {
+    fontSize: 12,
+    color: theme.colors.purple,
+    fontWeight: '500',
   },
   sectionTitle: {
     fontSize: 20,

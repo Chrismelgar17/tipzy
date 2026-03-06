@@ -1,6 +1,8 @@
 import React, { useMemo, useEffect, useRef, useState, Component } from 'react';
-import { View, Text, StyleSheet, Platform, Animated, Easing, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Platform, Animated, Easing, TouchableOpacity, Image } from 'react-native';
 import { MapPin } from 'lucide-react-native';
+import { theme } from '@/constants/theme';
+import { Venue } from '@/types/models';
 
 // Error boundary so a native map crash doesn't take down the whole app
 class MapErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
@@ -22,8 +24,6 @@ class MapErrorBoundary extends Component<{ children: React.ReactNode }, { hasErr
     return this.props.children;
   }
 }
-import { theme } from '@/constants/theme';
-import { Venue } from '@/types/models';
 
 // Only import react-native-maps on native platforms
 let MapView: any = null;
@@ -46,22 +46,40 @@ const US_FALLBACK_REGION = {
 };
 
 const mapStyle = [
-  { elementType: 'geometry', stylers: [{ color: '#09090f' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#09090f' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#7a7a8a' }] },
-  { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
-  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#c0b8d4' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#0e0e1a' }] },
-  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#6b6b7a' }] },
+  // Base: near-black background for everything
+  { elementType: 'geometry', stylers: [{ color: '#0d0d16' }] },
+  // Turn off all labels by default — we'll selectively re-enable roads
+  { elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  // Road fills — subtle gradient by road class
+  { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#1c1c2e' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#111120' }] },
+  { featureType: 'road.local', elementType: 'geometry.fill', stylers: [{ color: '#161625' }] },
+  { featureType: 'road.arterial', elementType: 'geometry.fill', stylers: [{ color: '#1e1e30' }] },
+  { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#241f38' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#14122a' }] },
+  // Street names & numbers — visible but subtle
+  { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'on' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#5c5c80' }] },
+  { featureType: 'road', elementType: 'labels.text.stroke', stylers: [{ color: '#0d0d16' }] },
   { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#2a1f3d' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#16122a' }] },
-  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#9b8ec4' }] },
+  // Water — darkest layer
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#08080f' }] },
+  // Landscape — matches base
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#0d0d16' }] },
+  // Hide all POIs (landmarks, schools, businesses, parks, etc.)
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.attraction', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.government', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.medical', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.park', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.place_of_worship', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.school', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.sports_complex', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#04040c' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#2a2a3a' }] },
+  { featureType: 'administrative', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative.neighborhood', stylers: [{ visibility: 'off' }] },
 ];
 
 interface NativeMapViewProps {
@@ -71,7 +89,7 @@ interface NativeMapViewProps {
   userLocation?: { latitude: number; longitude: number } | null;
 }
 
-// Animated pulsing ring for user location — Tipzy neon martini glass logo
+// User location marker — Tipzy logo with neon pulsing ring
 function UserLocationMarker() {
   const pulse = useRef(new Animated.Value(0)).current;
 
@@ -80,36 +98,34 @@ function UserLocationMarker() {
       Animated.sequence([
         Animated.timing(pulse, {
           toValue: 1,
-          duration: 1600,
+          duration: 1800,
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }),
-        Animated.timing(pulse, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
+        Animated.timing(pulse, { toValue: 0, duration: 0, useNativeDriver: true }),
       ])
     ).start();
   }, [pulse]);
 
-  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] });
-  const ringOpacity = pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.55, 0.25, 0] });
+  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.8] });
+  const ringOpacity = pulse.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0.7, 0.25, 0] });
 
   return (
     <View style={styles.userLocationWrapper}>
-      {/* Outer pulsing ring */}
+      {/* Pulsing neon ring */}
       <Animated.View
         style={[
           styles.userLocationRing,
           { transform: [{ scale: ringScale }], opacity: ringOpacity },
         ]}
       />
-      {/* Solid neon dot — no image so no white corners */}
-      <View style={styles.userLocationDotShadow}>
-        <View style={styles.userLocationDot}>
-          <View style={styles.userLocationInner} />
-        </View>
+      {/* Logo with purple glow */}
+      <View style={styles.userLocationLogoShadow}>
+        <Image
+          source={require('@/assets/images/icon.png')}
+          style={styles.userLocationLogo}
+          resizeMode="contain"
+        />
       </View>
     </View>
   );
@@ -142,11 +158,7 @@ function VenueMarker({
         <View style={[
           styles.customMarker,
           { backgroundColor: getMarkerColor(venue.crowdCount) }
-        ]}>
-          <Text style={styles.markerCount}>
-            {venue.crowdCount >= 100 ? '99+' : String(venue.crowdCount)}
-          </Text>
-        </View>
+        ]} />
       </View>
     </Marker>
   );
@@ -188,8 +200,6 @@ function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocatio
   // Center on user location if available, else first venue, else US fallback
   const initialRegion = useMemo(() => {
     if (userLocation) {
-      // Show roughly a 5-mile radius around the user on open.
-      // 1° latitude ≈ 69 miles → ~7 mile span ≈ 0.1°.
       return {
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
@@ -225,13 +235,20 @@ function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocatio
         style={styles.map}
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         customMapStyle={Platform.OS === 'android' ? mapStyle : undefined}
-        userInterfaceStyle={Platform.OS === 'ios' ? 'dark' : undefined}
+        userInterfaceStyle="dark"
         initialRegion={initialRegion}
         showsUserLocation={false}
-        showsCompass
-        showsZoomControls={Platform.OS === 'android'}
+        showsPointsOfInterest={false}
+        showsBuildings={false}
+        showsTraffic={false}
+        showsIndoors={false}
+        showsCompass={false}
+        showsZoomControls={false}
         rotateEnabled={false}
-        minZoomLevel={8}
+        scrollEnabled
+        zoomEnabled
+        minZoomLevel={12}
+        maxZoomLevel={18}
       >
         {/* Custom user location marker */}
         {userLocation && (
@@ -253,7 +270,7 @@ function NativeMapViewInner({ venues, onMarkerPress, getMarkerColor, userLocatio
           />
         ))}
       </MapView>
-      
+
       {/* Recenter on user location button */}
       {userLocation && (
         <TouchableOpacity
@@ -318,65 +335,43 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   customMarker: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.9)',
-    elevation: 5,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.4,
-    shadowRadius: 3,
-  },
-  markerCount: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '700',
-    textAlign: 'center',
+    shadowRadius: 2,
   },
   userLocationWrapper: {
-    width: 60,
-    height: 60,
+    width: 64,
+    height: 64,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
   userLocationRing: {
     position: 'absolute',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(168, 85, 247, 0.12)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(168, 85, 247, 0.08)',
     borderWidth: 1.5,
-    borderColor: 'rgba(168, 85, 247, 0.5)',
+    borderColor: 'rgba(168, 85, 247, 0.65)',
   },
-  userLocationDotShadow: {
-    // Shadow wrapper — separate from overflow:hidden so iOS doesn't clip the glow
+  userLocationLogoShadow: {
     shadowColor: '#a855f7',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.95,
+    shadowRadius: 16,
+    elevation: 12,
   },
-  userLocationDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#a855f7',
-    overflow: 'hidden',
-    borderWidth: 2.5,
-    borderColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  userLocationInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+  userLocationLogo: {
+    width: 40,
+    height: 40,
   },
   recenterButton: {
     position: 'absolute',

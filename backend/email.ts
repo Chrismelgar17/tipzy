@@ -598,3 +598,149 @@ export async function sendOfferRejectedEmail(
     html,
   });
 }
+
+// ─── Sponsor / Featured Offer Emails ─────────────────────────────────────────
+
+export interface SponsorRequestData {
+  offerId: string;
+  offerName: string;
+  venueName: string;
+  ownerName: string;
+  ownerEmail: string;
+  discount: number;
+  approveUrl: string;
+  rejectUrl: string;
+}
+
+export async function sendSponsorRequestEmail(
+  adminEmail: string,
+  data: SponsorRequestData,
+): Promise<MailResult> {
+  const subject = `⭐ Sponsor Request: "${data.offerName}" — ${data.venueName}`;
+  const text = [
+    `New Homepage Sponsorship Request`,
+    ``,
+    `Business  : ${data.venueName}`,
+    `Owner     : ${data.ownerName} (${data.ownerEmail})`,
+    `Offer     : ${data.offerName}`,
+    `Discount  : ${data.discount}%`,
+    ``,
+    `✅ Approve (3-day feature): ${data.approveUrl}`,
+    `❌ Reject: ${data.rejectUrl}`,
+  ].join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#0F0F1A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0F0F1A;padding:40px 16px;"><tr><td align="center">
+  <table width="540" cellpadding="0" cellspacing="0" style="max-width:540px;width:100%;">
+    <tr><td style="background:linear-gradient(135deg,#F59E0B 0%,#D97706 100%);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
+      <div style="font-size:52px;margin-bottom:8px;">⭐</div>
+      <h1 style="margin:0;color:#1F2937;font-size:26px;font-weight:900;">Sponsor Request</h1>
+      <p style="margin:6px 0 0;color:rgba(31,41,55,0.8);font-size:14px;">Homepage Featured Offer</p>
+    </td></tr>
+    <tr><td style="background:#16161E;padding:36px 40px;">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr><td style="padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.07);">
+          <p style="margin:0 0 4px;color:#9CA3AF;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Business</p>
+          <p style="margin:0;color:#F9FAFB;font-size:16px;font-weight:600;">${escHtml(data.venueName)}</p>
+        </td></tr>
+        <tr><td style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.07);">
+          <p style="margin:0 0 4px;color:#9CA3AF;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Owner</p>
+          <p style="margin:0;color:#F9FAFB;font-size:15px;">${escHtml(data.ownerName)} &lt;${escHtml(data.ownerEmail)}&gt;</p>
+        </td></tr>
+        <tr><td style="padding:12px 0 24px;">
+          <p style="margin:0 0 4px;color:#9CA3AF;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Offer</p>
+          <p style="margin:0;color:#F9FAFB;font-size:16px;font-weight:700;">${escHtml(data.offerName)} — ${data.discount}% off</p>
+        </td></tr>
+      </table>
+      <p style="margin:0 0 20px;color:#9CA3AF;font-size:14px;">This offer will be <strong style="color:#F9FAFB;">featured at the top of the Tipzy home page</strong> for 3 days if approved.</p>
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td width="48%" style="padding-right:8px;">
+            <a href="${data.approveUrl}" style="display:block;background:#22C55E;color:#fff;text-align:center;padding:14px 20px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;">✅ Approve (3 days)</a>
+          </td>
+          <td width="4%"></td>
+          <td width="48%" style="padding-left:8px;">
+            <a href="${data.rejectUrl}" style="display:block;background:#EF4444;color:#fff;text-align:center;padding:14px 20px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;">❌ Reject</a>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+    <tr><td style="background:#0F0F14;border-radius:0 0 16px 16px;padding:18px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+      <p style="margin:0;color:#374151;font-size:12px;">© 2026 Tipzy Admin</p>
+    </td></tr>
+  </table></td></tr></table>
+</body></html>`;
+  return sendEmail({ to: adminEmail, subject, text, html });
+}
+
+export async function sendSponsorApprovedEmail(
+  to: string,
+  ownerName: string,
+  offerName: string,
+  venueName: string,
+): Promise<MailResult> {
+  const subject = `🌟 Your offer is now featured on Tipzy!`;
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;background:#0B0B0F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0F;padding:40px 16px;"><tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
+    <tr><td style="background:linear-gradient(135deg,#F59E0B,#D97706);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
+      <div style="font-size:52px;margin-bottom:8px;">🌟</div>
+      <h1 style="margin:0;color:#1F2937;font-size:26px;font-weight:900;">You're Featured!</h1>
+    </td></tr>
+    <tr><td style="background:#16161E;padding:36px 40px;text-align:center;">
+      <p style="color:#9CA3AF;font-size:15px;line-height:1.7;margin:0 0 16px;">Hi ${escHtml(ownerName)},</p>
+      <p style="color:#E5E7EB;font-size:15px;line-height:1.7;margin:0 0 20px;">
+        Your offer <strong style="color:#FCD34D;">"${escHtml(offerName)}"</strong> for <strong style="color:#A78BFA;">${escHtml(venueName)}</strong> is now <strong style="color:#FCD34D;">featured at the top of the Tipzy home page</strong> for the next 3 days!
+      </p>
+      <p style="color:#9CA3AF;font-size:14px;line-height:1.65;margin:0 0 12px;">Thousands of Tipzy users will see your offer when they open the app.</p>
+      <p style="color:#6B7280;font-size:13px;margin:0;">— The Tipzy Team 🍸</p>
+    </td></tr>
+    <tr><td style="background:#0F0F14;border-radius:0 0 16px 16px;padding:18px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+      <p style="margin:0;color:#374151;font-size:12px;">© 2026 Tipzy · tipzy.team@gmail.com</p>
+    </td></tr>
+  </table></td></tr></table>
+</body></html>`;
+  return sendEmail({
+    to, subject, html,
+    text: `Hi ${ownerName}, your offer "${offerName}" for ${venueName} is now featured on the Tipzy home page for 3 days!`,
+  });
+}
+
+export async function sendSponsorRejectedEmail(
+  to: string,
+  ownerName: string,
+  offerName: string,
+  venueName: string,
+): Promise<MailResult> {
+  const subject = `Update on your sponsorship request for "${offerName}"`;
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;background:#0B0B0F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0F;padding:40px 16px;"><tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
+    <tr><td style="background:linear-gradient(135deg,#374151,#1F2937);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
+      <div style="font-size:48px;margin-bottom:8px;">🍸</div>
+      <h1 style="margin:0;color:#fff;font-size:26px;font-weight:900;">Sponsorship Update</h1>
+    </td></tr>
+    <tr><td style="background:#16161E;padding:36px 40px;text-align:center;">
+      <p style="color:#9CA3AF;font-size:15px;line-height:1.7;margin:0 0 16px;">Hi ${escHtml(ownerName)},</p>
+      <p style="color:#E5E7EB;font-size:15px;line-height:1.7;margin:0 0 20px;">
+        Your sponsorship request for <strong style="color:#E5E7EB;">"${escHtml(offerName)}"</strong> (${escHtml(venueName)}) was not approved at this time.
+      </p>
+      <p style="color:#9CA3AF;font-size:14px;line-height:1.65;margin:0 0 12px;">Feel free to contact <a href="mailto:tipzy.team@gmail.com" style="color:#A78BFA;">tipzy.team@gmail.com</a> for more information.</p>
+      <p style="color:#6B7280;font-size:13px;margin:0;">— The Tipzy Team 🍸</p>
+    </td></tr>
+    <tr><td style="background:#0F0F14;border-radius:0 0 16px 16px;padding:18px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+      <p style="margin:0;color:#374151;font-size:12px;">© 2026 Tipzy · tipzy.team@gmail.com</p>
+    </td></tr>
+  </table></td></tr></table>
+</body></html>`;
+  return sendEmail({
+    to, subject, html,
+    text: `Hi ${ownerName}, your sponsorship request for "${offerName}" (${venueName}) was not approved. Contact tipzy.team@gmail.com.`,
+  });
+}
+

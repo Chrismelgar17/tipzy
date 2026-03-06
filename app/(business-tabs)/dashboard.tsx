@@ -443,12 +443,65 @@ export default function BusinessDashboard() {
       color: theme.colors.text.primary,
       textAlign: 'center',
     },
+    venuePicker: {
+      marginBottom: theme.spacing.lg,
+    },
+    venuePickerContent: {
+      gap: theme.spacing.sm,
+      paddingBottom: 2,
+    },
+    venuePill: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.borderRadius.full,
+      backgroundColor: theme.colors.card,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    venuePillActive: {
+      backgroundColor: theme.colors.purple,
+      borderColor: theme.colors.purple,
+    },
+    venuePillText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.colors.text.secondary,
+    },
+    venuePillTextActive: {
+      color: theme.colors.white,
+      fontWeight: '600',
+    },
   });
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.scrollContent}>
+
+          {/* ── Venue picker (only when owner has >1 venue) ────────────────── */}
+          {ownedVenues.length > 1 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.venuePicker}
+              contentContainerStyle={styles.venuePickerContent}
+            >
+              {ownedVenues.map((v) => {
+                const isActive = v.id === selectedVenueId;
+                return (
+                  <TouchableOpacity
+                    key={v.id}
+                    style={[styles.venuePill, isActive && styles.venuePillActive]}
+                    onPress={() => setSelectedVenueId(v.id)}
+                  >
+                    <Text style={[styles.venuePillText, isActive && styles.venuePillTextActive]}>
+                      {v.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
 
           {/* â”€â”€ Summary cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <View style={styles.summaryContainer}>

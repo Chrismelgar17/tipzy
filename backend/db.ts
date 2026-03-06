@@ -341,6 +341,16 @@ const initPromise = (async () => {
   await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS users_provider_subject_unique ON users (auth_provider, provider_subject) WHERE provider_subject IS NOT NULL;");
   await pool.query("ALTER TABLE venues ADD COLUMN IF NOT EXISTS featured_rank INTEGER NOT NULL DEFAULT 0;");
 
+  // Sponsor / featured-offer columns (idempotent)
+  await pool.query("ALTER TABLE offers ADD COLUMN IF NOT EXISTS sponsor_status TEXT NOT NULL DEFAULT 'none';");
+  await pool.query("ALTER TABLE offers ADD COLUMN IF NOT EXISTS sponsored_until TIMESTAMPTZ;");
+  await pool.query(`CREATE TABLE IF NOT EXISTS offer_sponsor_tokens (
+    token TEXT PRIMARY KEY,
+    offer_id TEXT NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+    action TEXT NOT NULL CHECK (action IN ('approve','reject')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );`);
+
   await ensureAdminSeed();
   await ensureTestCustomerSeed();
 })().catch((err) => {
