@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -53,16 +53,29 @@ export default function BusinessDashboard() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [venueIdResolved, setVenueIdResolved] = useState<string | null>(null);
   const [selectedBar, setSelectedBar] = useState<{ label: string; value: number; index: number } | null>(null);
+  const [ownedVenues, setOwnedVenues] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
+
+  // when user picks a different venue from the pill picker, switch capacity tracking
+  useEffect(() => {
+    if (selectedVenueId) setVenueId(selectedVenueId);
+  }, [selectedVenueId]);
 
   // â”€â”€ fetch owned venue & stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const loadDashboard = useCallback(async () => {
     setStatsLoading(true);
     try {
-      const res = await api.get<any>('/business/dashboard');
-      const data = res.data;
+      const [dashRes, venuesRes] = await Promise.all([
+        api.get<any>('/business/dashboard'),
+        api.get<any>('/business/venues').catch(() => ({ data: { venues: [] } })),
+      ]);
+      const data = dashRes.data;
       setStats(data);
+      const venues: Array<{ id: string; name: string }> = venuesRes.data?.venues ?? [];
+      setOwnedVenues(venues);
       if (data.venueId && !venueIdResolved) {
         setVenueIdResolved(data.venueId);
+        setSelectedVenueId(data.venueId);
         setVenueId(data.venueId);
       }
     } catch (err) {
