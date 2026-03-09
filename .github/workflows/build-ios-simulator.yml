@@ -35,6 +35,8 @@ jobs:
           echo "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=938930558037-c1okd0ccbc378r00eb05k7gs6adh7jl7.apps.googleusercontent.com" >> .env
           echo "EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID=938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com" >> .env
           echo "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_51T8srNRsR6DpxA5rYEHltF828UIUcVMbFDoliYPnWRF4UsPseddgoN1H0gnWdzcAhPRGxKRG0vKUEHyHRkV8slvR00KL4OlfAi" >> .env
+          echo "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME=dp7f6rjbb" >> .env
+          echo "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET=TIpzy_un" >> .env
 
       # ── 4. Prebuild (generate ios/ native project) ───────────────────────────
       - name: Expo Prebuild
@@ -46,6 +48,8 @@ jobs:
           EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 938930558037-4fgl84q262kk9a130vhssc16sh5emi4l.apps.googleusercontent.com
           EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 938930558037-c1okd0ccbc378r00eb05k7gs6adh7jl7.apps.googleusercontent.com
           EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_51T8srNRsR6DpxA5rYEHltF828UIUcVMbFDoliYPnWRF4UsPseddgoN1H0gnWdzcAhPRGxKRG0vKUEHyHRkV8slvR00KL4OlfAi
+          EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME: dp7f6rjbb
+          EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET: TIpzy_un
         run: npx expo prebuild --platform ios --clean --non-interactive
 
       # ── 5. CocoaPods ─────────────────────────────────────────────────────────
@@ -71,6 +75,8 @@ jobs:
           EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 938930558037-4fgl84q262kk9a130vhssc16sh5emi4l.apps.googleusercontent.com
           EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 938930558037-c1okd0ccbc378r00eb05k7gs6adh7jl7.apps.googleusercontent.com
           EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_51T8srNRsR6DpxA5rYEHltF828UIUcVMbFDoliYPnWRF4UsPseddgoN1H0gnWdzcAhPRGxKRG0vKUEHyHRkV8slvR00KL4OlfAi
+          EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME: dp7f6rjbb
+          EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET: TIpzy_un
         run: |
           set -eo pipefail
           cd ios
