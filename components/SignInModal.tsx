@@ -103,9 +103,19 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
       onClose();
       resetForm();
     } catch (error: any) {
-      if (error?.code !== 'ERR_REQUEST_CANCELED') {
-        Alert.alert('Apple Sign In Failed', error?.message || 'Unable to sign in with Apple');
+      if (error?.code === 'ERR_REQUEST_CANCELED') return;
+      if (
+        error?.code === 1000 ||
+        error?.message?.includes('1000') ||
+        error?.message?.includes('AKAuthenticationError')
+      ) {
+        Alert.alert(
+          'Apple Sign In Unavailable',
+          'Sign In with Apple is not configured for this build. Please sign in with email or Google instead.',
+        );
+        return;
       }
+      Alert.alert('Apple Sign In Failed', error?.message || 'Unable to sign in with Apple');
     } finally {
       setIsLoading(false);
     }
