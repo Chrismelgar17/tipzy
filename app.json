@@ -64,7 +64,7 @@
     },
     "plugins": [
       ["@react-native-google-signin/google-signin", {
-        "iosUrlScheme": "com.googleusercontent.apps.938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve"
+        "iosUrlScheme": "com.googleusercontent.apps.938930558037-4fgl84q262kk9a130vhssc16sh5emi4l"
       }],
       [
         "expo-router",

@@ -15,7 +15,7 @@ export class GoogleSignInCancelledError extends Error {
 export function configureGoogleSignIn(): void {
   const iosClientId =
     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ??
-    '938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com';
+    '938930558037-4fgl84q262kk9a130vhssc16sh5emi4l.apps.googleusercontent.com';
   const webClientId =
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ??
     '938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com';

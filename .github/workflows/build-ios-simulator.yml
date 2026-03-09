@@ -31,7 +31,7 @@ jobs:
           echo "EXPO_PUBLIC_API_URL=https://tipzy-production.up.railway.app" >> .env
           echo "EXPO_PUBLIC_RORK_API_BASE_URL=https://tipzy-production.up.railway.app" >> .env
           echo "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com" >> .env
-          echo "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com" >> .env
+          echo "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=938930558037-4fgl84q262kk9a130vhssc16sh5emi4l.apps.googleusercontent.com" >> .env
           echo "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=938930558037-c1okd0ccbc378r00eb05k7gs6adh7jl7.apps.googleusercontent.com" >> .env
           echo "EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID=938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com" >> .env
           echo "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_51T8srNRsR6DpxA5rYEHltF828UIUcVMbFDoliYPnWRF4UsPseddgoN1H0gnWdzcAhPRGxKRG0vKUEHyHRkV8slvR00KL4OlfAi" >> .env
@@ -43,7 +43,7 @@ jobs:
           EXPO_PUBLIC_API_URL: https://tipzy-production.up.railway.app
           EXPO_PUBLIC_RORK_API_BASE_URL: https://tipzy-production.up.railway.app
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com
-          EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com
+          EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 938930558037-4fgl84q262kk9a130vhssc16sh5emi4l.apps.googleusercontent.com
           EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 938930558037-c1okd0ccbc378r00eb05k7gs6adh7jl7.apps.googleusercontent.com
           EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_51T8srNRsR6DpxA5rYEHltF828UIUcVMbFDoliYPnWRF4UsPseddgoN1H0gnWdzcAhPRGxKRG0vKUEHyHRkV8slvR00KL4OlfAi
         run: npx expo prebuild --platform ios --clean --non-interactive
@@ -68,7 +68,7 @@ jobs:
           EXPO_PUBLIC_API_URL: https://tipzy-production.up.railway.app
           EXPO_PUBLIC_RORK_API_BASE_URL: https://tipzy-production.up.railway.app
           EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: 938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com
-          EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com
+          EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: 938930558037-4fgl84q262kk9a130vhssc16sh5emi4l.apps.googleusercontent.com
           EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: 938930558037-c1okd0ccbc378r00eb05k7gs6adh7jl7.apps.googleusercontent.com
           EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_51T8srNRsR6DpxA5rYEHltF828UIUcVMbFDoliYPnWRF4UsPseddgoN1H0gnWdzcAhPRGxKRG0vKUEHyHRkV8slvR00KL4OlfAi
         run: |
