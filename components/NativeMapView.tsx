@@ -119,12 +119,12 @@ function UserLocationMarker() {
           { transform: [{ scale: ringScale }], opacity: ringOpacity },
         ]}
       />
-      {/* Logo with purple glow */}
+      {/* Logo clipped to circle with purple border */}
       <View style={styles.userLocationLogoShadow}>
         <Image
           source={require('@/assets/images/icon.png')}
           style={styles.userLocationLogo}
-          resizeMode="contain"
+          resizeMode="cover"
         />
       </View>
     </View>
@@ -371,15 +371,21 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(168, 85, 247, 0.65)',
   },
   userLocationLogoShadow: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#a855f7',
     shadowColor: '#a855f7',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.95,
-    shadowRadius: 16,
+    shadowRadius: 10,
     elevation: 12,
   },
   userLocationLogo: {
-    width: 40,
-    height: 40,
+    width: '100%',
+    height: '100%',
   },
   recenterButton: {
     position: 'absolute',
