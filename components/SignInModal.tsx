@@ -19,7 +19,7 @@ import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
 import * as Haptics from 'expo-haptics';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { nativeGoogleSignIn, GoogleSignInCancelledError } from '@/lib/google-signin';
+import { nativeGoogleSignIn, GoogleSignInCancelledError, GoogleSignInSimulatorError } from '@/lib/google-signin';
 
 interface SignInModalProps {
   visible: boolean;
@@ -75,6 +75,10 @@ export function SignInModal({ visible, onClose, title, subtitle }: SignInModalPr
       resetForm();
     } catch (err: any) {
       if (err instanceof GoogleSignInCancelledError) return;
+      if (err instanceof GoogleSignInSimulatorError) {
+        Alert.alert('Google Sign In Unavailable', err.message);
+        return;
+      }
       Alert.alert('Google Sign In Failed', err?.message || 'Unable to sign in with Google');
     } finally {
       setIsLoading(false);

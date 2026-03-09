@@ -8,6 +8,14 @@ export class GoogleSignInCancelledError extends Error {
   }
 }
 
+/** Thrown when Google Sign-In fails due to missing keychain (e.g. iOS Simulator / Appetize). */
+export class GoogleSignInSimulatorError extends Error {
+  constructor() {
+    super('Google Sign In is not available on the iOS Simulator. Please test on a real device or use email sign in.');
+    this.name = 'GoogleSignInSimulatorError';
+  }
+}
+
 /**
  * Configure the native Google Sign-In SDK.
  * Call once at app startup (e.g. in _layout.tsx or auth-context).
@@ -41,6 +49,17 @@ export async function nativeGoogleSignIn(): Promise<{ accessToken: string }> {
   } catch (error: any) {
     if (error?.code === statusCodes.SIGN_IN_CANCELLED) {
       throw new GoogleSignInCancelledError();
+    }
+    // Keychain is unavailable on iOS Simulator / Appetize
+    const msg: string = error?.message ?? '';
+    if (
+      msg.toLowerCase().includes('keychain') ||
+      msg.includes('SecItemCopyMatching') ||
+      msg.includes('OSStatus') ||
+      msg.includes('-34018') ||
+      msg.includes('Could not decrypt')
+    ) {
+      throw new GoogleSignInSimulatorError();
     }
     throw error;
   }
