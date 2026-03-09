@@ -127,6 +127,14 @@ export default function AuthScreen() {
       if (error?.code === 'ERR_REQUEST_CANCELED') {
         return;
       }
+      // error 1000 = bundle ID not registered for Sign In with Apple
+      if (error?.code === 1000 || error?.message?.includes('1000') || error?.message?.includes('AKAuthenticationError')) {
+        Alert.alert(
+          'Apple Sign In Unavailable',
+          'Sign In with Apple is not configured for this build. Please sign in with email or Google instead.',
+        );
+        return;
+      }
       Alert.alert('Apple Sign In Failed', error?.message || 'Unable to sign in with Apple');
     } finally {
       setIsLoading(false);

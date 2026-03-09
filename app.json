@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "usesAppleSignIn": true,
-      "bundleIdentifier": "app.rork.nightlife-access-app",
+      "bundleIdentifier": "com.chrismelgar.tipzy",
       "config": {
         "googleMapsApiKey": "AIzaSyBQJqxQO3mionv0MzjRQJjaupydexFozqI"
       },
