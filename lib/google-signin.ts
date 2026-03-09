@@ -13,9 +13,15 @@ export class GoogleSignInCancelledError extends Error {
  * Call once at app startup (e.g. in _layout.tsx or auth-context).
  */
 export function configureGoogleSignIn(): void {
+  const iosClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ??
+    '938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com';
+  const webClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ??
+    '938930558037-1ed436pos2lsn5onlhu1nnrr76eiu8ve.apps.googleusercontent.com';
   GoogleSignin.configure({
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    iosClientId,
+    webClientId,
     scopes: ['email', 'profile'],
   });
 }
