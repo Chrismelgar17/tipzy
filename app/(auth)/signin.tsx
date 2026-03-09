@@ -128,7 +128,15 @@ export default function AuthScreen() {
         return;
       }
       // error 1000 = bundle ID not registered for Sign In with Apple
-      if (error?.code === 1000 || error?.message?.includes('1000') || error?.message?.includes('AKAuthenticationError')) {
+      // Also catches simulator/Appetize where Apple auth is unavailable
+      const isAppleUnavailable =
+        error?.code === 1000 ||
+        error?.code === 'ERR_APPLE_AUTHENTICATION_REQUEST_FAILED' ||
+        error?.message?.includes('1000') ||
+        error?.message?.includes('AKAuthenticationError') ||
+        error?.message?.includes('unknown reason') ||
+        error?.message?.includes('AuthorizationError');
+      if (isAppleUnavailable) {
         Alert.alert(
           'Apple Sign In Unavailable',
           'Sign In with Apple is not configured for this build. Please sign in with email or Google instead.',
