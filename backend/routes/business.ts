@@ -2,6 +2,7 @@
  * Business auth routes (Postgres-backed)
  * POST /api/business/register
  * POST /api/business/login
+ * POST /api/business/provider-auth
  * POST /api/business/refresh
  * GET  /api/business/me
  * POST /api/business/change-password
@@ -32,6 +33,7 @@ import {
   requireRole,
 } from "../auth";
 import { query, type DbUser, type DbOrder, type DbVenue, type DbOffer, type DbEvent } from "../db";
+import { verifyAppleIdentity, verifyGoogleIdentity } from "../oauth";
 import {
   sendBusinessApprovalRequestEmail,
   sendOfferApprovalRequestEmail,
@@ -219,6 +221,98 @@ business.patch("/upgrade-account", requireAuth, async (c) => {
       businessStatus: "pending",
       role: "business",
       createdAt: updatedUser.created_at,
+    },
+    token: accessToken,
+    refreshToken,
+  });
+});
+
+// Provider sign-in for existing business accounts (Google / Apple)
+business.post("/provider-auth", async (c) => {
+  type ProviderType = "google" | "apple";
+  let body: {
+    provider?: ProviderType;
+    email?: string;
+    name?: string;
+    providerSubject?: string;
+    idToken?: string;
+    accessToken?: string;
+  };
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  const provider = body.provider;
+  if (!provider || !["google", "apple"].includes(provider)) {
+    return c.json({ error: "provider must be one of: google, apple" }, 400);
+  }
+
+  let normalizedEmail = body.email?.trim().toLowerCase();
+  let providerSubject = body.providerSubject?.trim() || normalizedEmail;
+
+  try {
+    if (provider === "google") {
+      const identity = await verifyGoogleIdentity({ idToken: body.idToken, accessToken: body.accessToken });
+      if (!identity.email) return c.json({ error: "Google did not return an email address" }, 403);
+      normalizedEmail = identity.email.trim().toLowerCase();
+      providerSubject = `google:${identity.subject}`;
+    } else if (provider === "apple") {
+      const identity = await verifyAppleIdentity({ idToken: body.idToken });
+      if (!identity.emailVerified) return c.json({ error: "Apple account email is not verified" }, 403);
+      providerSubject = `apple:${identity.subject}`;
+      normalizedEmail = identity.email ? identity.email.trim().toLowerCase() : normalizedEmail;
+    }
+  } catch (error: any) {
+    return c.json({ error: error?.message ?? "Provider token verification failed" }, 401);
+  }
+
+  if (!providerSubject) return c.json({ error: "provider subject is required" }, 400);
+
+  let user: DbUser | undefined;
+
+  // 1) Primary match: provider pair
+  const providerMatch = await query<DbUser>(
+    "SELECT * FROM users WHERE auth_provider = $1 AND provider_subject = $2 LIMIT 1",
+    [provider, providerSubject],
+  );
+  user = providerMatch.rows[0];
+
+  // 2) Fallback match by email
+  if (!user && normalizedEmail) {
+    const emailMatch = await query<DbUser>("SELECT * FROM users WHERE email = $1 LIMIT 1", [normalizedEmail]);
+    user = emailMatch.rows[0];
+  }
+
+  if (!user) return c.json({ error: "No business account found for this provider. Please register first." }, 404);
+  if (user.role !== "business") return c.json({ error: "Not a business account" }, 403);
+
+  // Link provider to account if not already linked
+  const updated = await query<DbUser>(
+    `UPDATE users
+     SET email_verified = true,
+         auth_provider = COALESCE(auth_provider, $1),
+         provider_subject = COALESCE(provider_subject, $2)
+     WHERE id = $3
+     RETURNING id, email, name, phone, role, business_name, business_category, business_status, created_at, email_verified`,
+    [provider, providerSubject, user.id],
+  );
+  user = updated.rows[0];
+
+  const accessToken = await signAccessToken(user.id, user.email, "business");
+  const refreshToken = await signRefreshToken(user.id, "business");
+  await query("INSERT INTO refresh_tokens (token, user_id) VALUES ($1, $2)", [refreshToken, user.id]);
+
+  return c.json({
+    message: "Provider authentication successful",
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      phone: user.phone,
+      role: "business",
+      businessName: user.business_name,
+      businessCategory: user.business_category,
+      businessStatus: user.business_status,
+      createdAt: user.created_at,
+      emailVerified: true,
     },
     token: accessToken,
     refreshToken,
@@ -986,6 +1080,15 @@ business.post("/venues/add", requireAuth, requireRole("business", "admin"), asyn
     message: "New venue submitted for review. You will be notified by email when it is approved.",
     venueId,
   }, 201);
+});
+
+// Delete business account
+business.delete("/account", requireAuth, async (c) => {
+  const userId = (c as any).get("userId") as string;
+  // Cascade deletes venues, tokens, orders etc. via foreign key ON DELETE CASCADE
+  await query("DELETE FROM refresh_tokens WHERE user_id = $1", [userId]);
+  await query("DELETE FROM users WHERE id = $1", [userId]);
+  return c.json({ message: "Account deleted successfully" });
 });
 
 export default business;

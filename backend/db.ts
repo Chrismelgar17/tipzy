@@ -40,6 +40,7 @@ export interface DbVenue {
   price_level: number;
   rating: number | null;
   description: string | null;
+  website: string | null;
   status: "pending" | "approved" | "rejected";
   featured_rank: number;
   created_at: string;

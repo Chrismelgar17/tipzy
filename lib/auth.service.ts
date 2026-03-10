@@ -111,7 +111,21 @@ export const authService = {
       if (!data.token || !data.user) throw new Error("Unexpected response from server");
       await saveSession(data.token, data.refreshToken, data.user);
       return data;
-    } catch (e) { throw handleAuthError(e as ApiError); }
+    } catch (e) {
+      const err = e as ApiError;
+      const status = err?.response?.status;
+      const msg = (err?.response?.data as any)?.error ?? '';
+      // 403 "Not a customer account" => try business provider-auth
+      if (status === 403 && msg.toLowerCase().includes('customer')) {
+        try {
+          const { data } = await api.post<AuthResponse>("/business/provider-auth", { provider, ...payload });
+          if (!data.token || !data.user) throw new Error("Unexpected response from server");
+          await saveSession(data.token, data.refreshToken, data.user);
+          return data;
+        } catch (bizErr) { throw handleAuthError(bizErr as ApiError); }
+      }
+      throw handleAuthError(err);
+    }
   },
 
   getProfile: async (): Promise<AuthUser> => {
@@ -158,6 +172,13 @@ export const authService = {
   deleteAccount: async (): Promise<void> => {
     try {
       await api.delete("/customer/account");
+      await secureStorage.clearAuthData();
+    } catch (e) { throw handleAuthError(e as ApiError); }
+  },
+
+  deleteBusinessAccount: async (): Promise<void> => {
+    try {
+      await api.delete("/business/account");
       await secureStorage.clearAuthData();
     } catch (e) { throw handleAuthError(e as ApiError); }
   },

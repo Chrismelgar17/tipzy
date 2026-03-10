@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
   Switch,
   Linking,
+  Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '@/lib/api';
 import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
@@ -25,6 +28,7 @@ import {
   Building2,
   Users,
   CreditCard,
+  Trash2,
 } from 'lucide-react-native';
 
 interface SettingItem {
@@ -47,6 +51,29 @@ export default function BusinessSettingsScreen() {
   const handleSignOut = async () => {
     await signOut();
     router.replace('/(auth)/signin' as any);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'Are you sure you want to permanently delete your business account? This will remove all your venues, orders, and data and cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete('/business/account');
+              await AsyncStorage.removeItem('businessProfile');
+              router.replace('/(auth)/signin' as any);
+            } catch (err: any) {
+              Alert.alert('Error', err?.response?.data?.error ?? 'Failed to delete account. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleChangePassword = () => {
@@ -366,6 +393,17 @@ export default function BusinessSettingsScreen() {
       borderWidth: 1,
       borderColor: theme.colors.error,
     },
+    deleteaccountButton: {
+      backgroundColor: theme.colors.card,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.lg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: theme.colors.error,
+      marginTop: theme.spacing.md,
+    },
     logoutIcon: {
       marginRight: theme.spacing.md,
     },
@@ -442,6 +480,17 @@ export default function BusinessSettingsScreen() {
                 <LogOut size={24} color={theme.colors.error} />
               </View>
               <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.deleteaccountButton}
+              onPress={handleDeleteAccount}
+              testID="delete-account-button"
+            >
+              <View style={styles.logoutIcon}>
+                <Trash2 size={24} color={theme.colors.error} />
+              </View>
+              <Text style={styles.logoutText}>Delete Account</Text>
             </TouchableOpacity>
           </View>
 

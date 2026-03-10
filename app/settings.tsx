@@ -5,60 +5,25 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Switch,
   Alert,
   Modal,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { 
   Settings as SettingsIcon, 
-  Globe, 
-  Palette, 
   Info, 
   HelpCircle,
-  ChevronDown,
-  Check,
   Shield,
   FileText,
   ChevronRight
 } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
-import { AppSettings } from '@/types/models';
 
 export default function SettingsScreen() {
-  const [settings, setSettings] = useState<AppSettings>({
-    language: 'en',
-    theme: 'dark',
-  });
-
-  const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
-
-  const languages = [
-    { code: 'en', name: 'English', flag: '🇺🇸' },
-    { code: 'es', name: 'Español', flag: '🇪🇸' },
-    { code: 'fr', name: 'Français', flag: '🇫🇷' },
-  ];
-
-  const handleLanguageChange = (languageCode: 'en' | 'es' | 'fr') => {
-    setSettings(prev => ({ ...prev, language: languageCode }));
-    setShowLanguageModal(false);
-    Alert.alert('Language Changed', 'The app language has been updated.');
-  };
-
-  const handleThemeToggle = () => {
-    const newTheme = settings.theme === 'light' ? 'dark' : 'light';
-    setSettings(prev => ({ ...prev, theme: newTheme }));
-    Alert.alert('Theme Changed', `Switched to ${newTheme} mode.`);
-  };
 
   const handleHelpSupport = () => {
     setShowHelpModal(true);
-  };
-
-  const getCurrentLanguageName = () => {
-    const lang = languages.find(l => l.code === settings.language);
-    return lang ? `${lang.flag} ${lang.name}` : 'English';
   };
 
   const appVersion = '1.0.0';
@@ -79,52 +44,6 @@ export default function SettingsScreen() {
           <Text style={styles.headerDescription}>
             Customize your app experience and preferences.
           </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Appearance</Text>
-          
-          <TouchableOpacity
-            style={styles.optionItem}
-            onPress={() => setShowLanguageModal(true)}
-          >
-            <View style={styles.optionLeft}>
-              <View style={styles.iconContainer}>
-                <Globe size={20} color={theme.colors.purple} />
-              </View>
-              <View style={styles.optionInfo}>
-                <Text style={styles.optionTitle}>Language</Text>
-                <Text style={styles.optionDescription}>Choose your preferred language</Text>
-              </View>
-            </View>
-            <View style={styles.optionRight}>
-              <Text style={styles.optionValue}>{getCurrentLanguageName()}</Text>
-              <ChevronDown size={20} color={theme.colors.text.tertiary} />
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.optionItem}>
-            <View style={styles.optionLeft}>
-              <View style={styles.iconContainer}>
-                <Palette size={20} color={theme.colors.purple} />
-              </View>
-              <View style={styles.optionInfo}>
-                <Text style={styles.optionTitle}>Theme</Text>
-                <Text style={styles.optionDescription}>
-                  {settings.theme === 'light' ? 'Light Mode' : 'Dark Mode'}
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={settings.theme === 'dark'}
-              onValueChange={handleThemeToggle}
-              trackColor={{
-                false: theme.colors.border,
-                true: theme.colors.purple + '40',
-              }}
-              thumbColor={settings.theme === 'dark' ? theme.colors.purple : theme.colors.text.tertiary}
-            />
-          </View>
         </View>
 
         <View style={styles.section}>
@@ -199,42 +118,6 @@ export default function SettingsScreen() {
           </View>
         </View>
       </ScrollView>
-
-      {/* Language Selection Modal */}
-      <Modal
-        visible={showLanguageModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowLanguageModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setShowLanguageModal(false)}>
-              <Text style={styles.cancelButton}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Select Language</Text>
-            <View style={styles.placeholder} />
-          </View>
-          
-          <View style={styles.modalContent}>
-            {languages.map((language) => (
-              <TouchableOpacity
-                key={language.code}
-                style={styles.languageOption}
-                onPress={() => handleLanguageChange(language.code as 'en' | 'es' | 'fr')}
-              >
-                <View style={styles.languageInfo}>
-                  <Text style={styles.languageFlag}>{language.flag}</Text>
-                  <Text style={styles.languageName}>{language.name}</Text>
-                </View>
-                {settings.language === language.code && (
-                  <Check size={20} color={theme.colors.purple} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </Modal>
 
       {/* Help & Support Modal */}
       <Modal

@@ -499,12 +499,16 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   }, [role]);
 
   const deleteAccount = useCallback(async () => {
-    await authService.deleteAccount();
+    if (role === 'business') {
+      await authService.deleteBusinessAccount();
+    } else {
+      await authService.deleteAccount();
+    }
     setUser(null);
     setRole(null);
     await AsyncStorage.removeItem('user');
     router.replace('/' as any);
-  }, []);
+  }, [role]);
 
   //  Onboarding helpers 
 

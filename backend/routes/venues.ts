@@ -42,6 +42,7 @@ function rowToVenue(v: DbVenue) {
     priceLevel: v.price_level,
     rating: v.rating,
     description: v.description ?? null,
+    website: v.website ?? null,
     status: v.status,
     createdAt: v.created_at,
     featuredRank: v.featured_rank ?? 0,
@@ -312,6 +313,7 @@ venues.patch("/:id", requireAuth, async (c) => {
   if (body.priceLevel !== undefined) addField("price_level", body.priceLevel);
   if (body.rating !== undefined) addField("rating", body.rating);
   if (body.description !== undefined) addField("description", body.description);
+  if ((body as any).website !== undefined) addField("website", (body as any).website);
 
   if (!fields.length) return c.json({ error: "No fields to update" }, 400);
   fields.push(`updated_at = now()`);

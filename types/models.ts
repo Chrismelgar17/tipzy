@@ -57,6 +57,8 @@ export interface Venue {
   distance?: number;
   closingTime?: string;
   rating?: number;
+  description?: string | null;
+  website?: string | null;
 }
 
 export interface Event {

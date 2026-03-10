@@ -84,13 +84,19 @@ jobs:
         run: |
           set -eo pipefail
 
-          # Decode certificate
+          # Decode certificate — strip any whitespace/newlines the secret may contain
           CERT_PATH="$RUNNER_TEMP/certificate.p12"
-          echo "$IOS_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+          echo "$IOS_CERTIFICATE_BASE64" | tr -d '[:space:]' | base64 --decode > "$CERT_PATH"
 
           # Decode provisioning profile
           PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
-          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | tr -d '[:space:]' | base64 --decode > "$PP_PATH"
+
+          # Verify the certificate file looks like a valid PKCS12 blob
+          if ! file "$CERT_PATH" | grep -qiE 'data|certificate|pkcs'; then
+            echo "::error::Certificate file does not appear to be a valid .p12 — check IOS_CERTIFICATE_BASE64 secret"
+            exit 1
+          fi
 
           # Create a temporary keychain
           KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
@@ -103,6 +109,9 @@ jobs:
             -P "$IOS_CERTIFICATE_PASSWORD" \
             -A -t cert -f pkcs12 \
             -k "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH"
 
           # Install provisioning profile

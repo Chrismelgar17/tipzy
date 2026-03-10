@@ -55,10 +55,15 @@ CREATE TABLE IF NOT EXISTS venues (
   photos JSONB NOT NULL DEFAULT '[]',
   price_level INTEGER NOT NULL DEFAULT 2,
   rating DOUBLE PRECISION,
+  description TEXT,
+  website TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE venues ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE venues ADD COLUMN IF NOT EXISTS website TEXT;
 
 -- ── Phase 3: Business Operations ──────────────────────────────────────────────
 

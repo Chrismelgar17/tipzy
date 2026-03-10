@@ -144,6 +144,7 @@ export default function BusinessProfileScreen() {
         genres: string[];
         photos: string[];
         description: string | null;
+        website: string | null;
       }> }>('/business/venues');
       if (res.data.venues.length > 0) {
         const venue = res.data.venues[0];
@@ -185,7 +186,7 @@ export default function BusinessProfileScreen() {
           });
         }
 
-        // Merge: backend wins for fields it owns; keep local values for website only
+        // Merge: backend wins for fields it owns
         setFormData(prev => ({
           ...prev,
           businessName: venue.name || prev.businessName,
@@ -194,6 +195,7 @@ export default function BusinessProfileScreen() {
           galleryImages: venue.photos.length > 0 ? venue.photos : prev.galleryImages,
           workHours: Object.keys(venue.hours ?? {}).length > 0 ? workHoursFromBackend : prev.workHours,
           description: venue.description ?? prev.description,
+          website: venue.website ?? prev.website,
         }));
       }
     } catch {
@@ -279,6 +281,7 @@ export default function BusinessProfileScreen() {
             genres: (formData.services ?? '').split(',').map((s: string) => s.trim()).filter((s: string) => s),
             photos: formData.galleryImages,
             description: (formData.description ?? '').trim() || null,
+            website: (formData.website ?? '').trim() || null,
           });
         } catch (err) {
           console.warn('[BusinessProfile] Failed to sync venue with backend:', err);
@@ -364,7 +367,7 @@ export default function BusinessProfileScreen() {
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
-      'Are you sure you want to delete your business account? This action cannot be undone.',
+      'Are you sure you want to permanently delete your business account? This will remove all your venues, orders, and data. This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -372,12 +375,11 @@ export default function BusinessProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              await api.delete('/business/account');
               await AsyncStorage.removeItem('businessProfile');
-              Alert.alert('Account Deleted', 'Your business account has been deleted.', [
-                { text: 'OK', onPress: () => router.replace('/(auth)/signin' as any) }
-              ]);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete account. Please try again.');
+              router.replace('/(auth)/signin' as any);
+            } catch (error: any) {
+              Alert.alert('Error', error?.response?.data?.error ?? 'Failed to delete account. Please try again.');
             }
           },
         },

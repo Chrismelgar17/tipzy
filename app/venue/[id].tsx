@@ -11,6 +11,7 @@ import {
   Platform,
   ActivityIndicator,
   Share,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -22,7 +23,8 @@ import {
   Heart,
   Share2,
   Calendar,
-
+  Globe,
+  ChevronRight,
 } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -45,19 +47,23 @@ interface ApiEvent {
   createdAt: string;
 }
 
-/** Get tonight's closing time from the hours dict */
-function getTonightClosingTime(hours: Venue['hours']): string {
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const today = days[new Date().getDay()];
-  return hours?.[today]?.close ?? 'Closed';
+/** Format a time string like "22:00" to "10:00 PM" */
+function formatTime(t: string): string {
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-/** Check if venue is open tonight */
-function isOpenTonight(hours: Venue['hours']): boolean {
-  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const today = days[new Date().getDay()];
-  return !!hours?.[today]?.open;
-}
+const DAYS_OF_WEEK = [
+  { key: 'monday',    label: 'Mon' },
+  { key: 'tuesday',   label: 'Tue' },
+  { key: 'wednesday', label: 'Wed' },
+  { key: 'thursday',  label: 'Thu' },
+  { key: 'friday',    label: 'Fri' },
+  { key: 'saturday',  label: 'Sat' },
+  { key: 'sunday',    label: 'Sun' },
+];
 
 export default function VenueDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -220,12 +226,20 @@ export default function VenueDetailScreen() {
             <View style={styles.infoItem}>
               <Clock size={20} color={theme.colors.text.secondary} />
               <View style={styles.infoText}>
-                <Text style={styles.infoLabel}>Tonight&apos;s Hours</Text>
-                <Text style={styles.infoValue}>
-                  {isOpenTonight(venue.hours)
-                    ? `Open until ${getTonightClosingTime(venue.hours)}`
-                    : 'Closed today'}
-                </Text>
+                <Text style={styles.infoLabel}>Hours</Text>
+                {DAYS_OF_WEEK.map(({ key, label }) => {
+                  // Support both abbreviated (mon/tue) and full (monday/tuesday) keys
+                  const entry = (venue.hours as any)?.[key]
+                    ?? (venue.hours as any)?.[key.slice(0, 3)];
+                  return (
+                    <View key={key} style={styles.hoursRow}>
+                      <Text style={styles.hoursDay}>{label}</Text>
+                      <Text style={styles.hoursTime}>
+                        {entry ? `${formatTime(entry.open)} – ${formatTime(entry.close)}` : 'Closed'}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
             </View>
 
@@ -253,6 +267,29 @@ export default function VenueDetailScreen() {
               <Text style={styles.policyValue}>{venue.capacity}</Text>
             </View>
           </View>
+
+          {/* Description */}
+          {venue.description ? (
+            <View style={styles.descriptionSection}>
+              <Text style={styles.sectionTitle}>About</Text>
+              <Text style={styles.descriptionText}>{venue.description}</Text>
+            </View>
+          ) : null}
+
+          {/* Website */}
+          {venue.website ? (
+            <TouchableOpacity
+              style={styles.websiteButton}
+              onPress={() => {
+                const url = venue.website!.startsWith('http') ? venue.website! : `https://${venue.website}`;
+                Linking.openURL(url);
+              }}
+            >
+              <Globe size={18} color={theme.colors.purple} />
+              <Text style={styles.websiteText} numberOfLines={1}>{venue.website}</Text>
+              <ChevronRight size={16} color={theme.colors.text.tertiary} />
+            </TouchableOpacity>
+          ) : null}
 
           {/* Events */}
           <View style={styles.eventsSection}>
@@ -495,5 +532,45 @@ const styles = StyleSheet.create({
     fontSize: 18,
     textAlign: 'center',
     marginTop: theme.spacing.xxl,
+  },
+  hoursRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+  },
+  hoursDay: {
+    fontSize: 14,
+    color: theme.colors.text.secondary,
+    width: 36,
+  },
+  hoursTime: {
+    fontSize: 14,
+    color: theme.colors.text.primary,
+    flex: 1,
+    textAlign: 'right',
+  },
+  descriptionSection: {
+    marginBottom: theme.spacing.lg,
+  },
+  descriptionText: {
+    fontSize: 15,
+    color: theme.colors.text.secondary,
+    lineHeight: 22,
+    marginTop: theme.spacing.sm,
+  },
+  websiteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm + 2,
+    marginBottom: theme.spacing.lg,
+    gap: theme.spacing.sm,
+  },
+  websiteText: {
+    flex: 1,
+    fontSize: 15,
+    color: theme.colors.purple,
   },
 });
