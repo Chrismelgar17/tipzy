@@ -1,39 +1,46 @@
 name: Build iOS IPA
 
 # ─────────────────────────────────────────────────────────────────────────────
-# REQUIRED GitHub Repository Secret (Settings → Secrets → Actions):
+# REQUIRED GitHub Repository Secrets (Settings → Secrets → Actions):
 #
-#   EXPO_TOKEN  – your Expo personal access token
-#                 Generate at: https://expo.dev/accounts/[your-account]/settings/access-tokens
+#   IOS_CERTIFICATE_BASE64          – base64 of your .p12 distribution certificate
+#                                     Download from: expo.dev → your project → Credentials → iOS
+#                                     Then on Windows PowerShell:
+#                                     [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\cert.p12")) | Set-Clipboard
 #
-# EAS handles all Apple certificates and provisioning profiles automatically.
-# On first run you will need to log in to your Apple account interactively
-# (run `npx eas build --platform ios --profile preview` locally once to set up
-# credentials, then subsequent runs here are fully automated).
+#   IOS_CERTIFICATE_PASSWORD        – password for the .p12 (leave blank/empty if EAS managed)
 #
-# Build profile is "preview" (internal distribution / ad-hoc).
-# Change EAS_BUILD_PROFILE below to "production" for App Store / TestFlight.
+#   IOS_PROVISIONING_PROFILE_BASE64 – base64 of your .mobileprovision file
+#                                     Download from expo.dev → Credentials → iOS → Ad Hoc profile
+#                                     Then: [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\profile.mobileprovision")) | Set-Clipboard
+#
+# Apple Team ID:  5L78N67U4Z  (already known — hardcoded below)
+# Bundle ID:      app.rork.nightlife-access-app
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
   workflow_dispatch:
     inputs:
-      profile:
-        description: 'EAS build profile'
+      export_method:
+        description: 'Export method'
         required: false
-        default: 'preview'
+        default: 'ad-hoc'
         type: choice
         options:
-          - preview
-          - production
+          - ad-hoc
+          - app-store
 
 env:
-  EAS_BUILD_PROFILE: ${{ inputs.profile || 'preview' }}
+  EXPORT_METHOD: ${{ inputs.export_method || 'ad-hoc' }}
+  APPLE_TEAM_ID: 5L78N67U4Z
+  BUNDLE_ID: app.rork.nightlife-access-app
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    runs-on: macos-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
 
     steps:
       # ── 1. Checkout ──────────────────────────────────────────────────────────
@@ -45,26 +52,101 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
-      # ── 3. Install Expo & EAS CLI ────────────────────────────────────────────
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      # ── 4. Install JS dependencies ───────────────────────────────────────────
+      # ── 3. Install JS deps ───────────────────────────────────────────────────
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      # ── 5. Trigger EAS cloud build ───────────────────────────────────────────
-      - name: Build iOS with EAS
+      # ── 4. Write .env ────────────────────────────────────────────────────────
+      - name: Write production .env
         run: |
-          eas build \
-            --platform ios \
-            --profile "$EAS_BUILD_PROFILE" \
-            --non-interactive \
-            --wait
+          echo "EXPO_PUBLIC_API_URL=https://tipzy-production.up.railway.app" >> .env
+          echo "EXPO_PUBLIC_RORK_API_BASE_URL=https://tipzy-production.up.railway.app" >> .env
+
+      # ── 5. Expo Prebuild ─────────────────────────────────────────────────────
+      - name: Expo Prebuild
         env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_API_URL: https://tipzy-production.up.railway.app
+          EXPO_PUBLIC_RORK_API_BASE_URL: https://tipzy-production.up.railway.app
+          EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_51T8srNRsR6DpxA5rYEHltF828UIUcVMbFDoliYPnWRF4UsPseddgoN1H0gnWdzcAhPRGxKRG0vKUEHyHRkV8slvR00KL4OlfAi
+        run: npx expo prebuild --platform ios --clean --non-interactive
+
+      # ── 6. CocoaPods ─────────────────────────────────────────────────────────
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: pods-${{ hashFiles('ios/Podfile') }}
+          restore-keys: pods-
+
+      - name: Install CocoaPods
+        run: cd ios && pod install --repo-update
+
+      # ── 7. Install certificate & provisioning profile ────────────────────────
+      - name: Install certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+
+      - name: Install provisioning profile
+        run: |
+          set -eo pipefail
+          PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | tr -d '[:space:]' | base64 --decode > "$PP_PATH"
+          PP_UUID=$(security cms -D -i "$PP_PATH" | plutil -extract UUID xml1 -o - - | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
+          echo "Installed profile UUID: $PP_UUID"
+
+      # ── 8. Archive ───────────────────────────────────────────────────────────
+      - name: Archive app
+        run: |
+          set -eo pipefail
+          cd ios
+          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$GITHUB_WORKSPACE/Tipzy.xcarchive" \
+            -destination "generic/platform=iOS" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            CODE_SIGN_STYLE=Manual \
+            ONLY_ACTIVE_ARCH=NO
+
+      # ── 9. Export IPA ────────────────────────────────────────────────────────
+      - name: Export IPA
+        run: |
+          set -eo pipefail
+          cat > "$GITHUB_WORKSPACE/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>${EXPORT_METHOD}</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>stripSwiftSymbols</key><true/>
+            <key>compileBitcode</key><false/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$GITHUB_WORKSPACE/Tipzy.xcarchive" \
+            -exportPath "$GITHUB_WORKSPACE/ipa_output" \
+            -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist"
+          IPA=$(find "$GITHUB_WORKSPACE/ipa_output" -name "*.ipa" | head -1)
+          cp "$IPA" "$GITHUB_WORKSPACE/Tipzy.ipa"
+          ls -lh "$GITHUB_WORKSPACE/Tipzy.ipa"
+
+      # ── 10. Upload as artifact ───────────────────────────────────────────────
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tipzy-${{ env.EXPORT_METHOD }}-${{ github.run_number }}.ipa
+          path: Tipzy.ipa
+          retention-days: 30
