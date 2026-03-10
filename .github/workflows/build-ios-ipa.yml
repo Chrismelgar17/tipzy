@@ -75,52 +75,23 @@ jobs:
           pod install --repo-update
 
       # ── 6. Install Apple certificate & provisioning profile ──────────────────
-      - name: Install certificate and provisioning profile
-        env:
-          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
-          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: tipzy-ci-keychain
+      - name: Install certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+
+      - name: Install provisioning profile
         run: |
           set -eo pipefail
-
-          # Decode certificate — strip any whitespace/newlines the secret may contain
-          CERT_PATH="$RUNNER_TEMP/certificate.p12"
-          echo "$IOS_CERTIFICATE_BASE64" | tr -d '[:space:]' | base64 --decode > "$CERT_PATH"
-
-          # Decode provisioning profile
           PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
-          echo "$IOS_PROVISIONING_PROFILE_BASE64" | tr -d '[:space:]' | base64 --decode > "$PP_PATH"
-
-          # Verify the certificate file looks like a valid PKCS12 blob
-          if ! file "$CERT_PATH" | grep -qiE 'data|certificate|pkcs'; then
-            echo "::error::Certificate file does not appear to be a valid .p12 — check IOS_CERTIFICATE_BASE64 secret"
-            exit 1
-          fi
-
-          # Create a temporary keychain
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Import certificate into keychain
-          security import "$CERT_PATH" \
-            -P "$IOS_CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 \
-            -k "$KEYCHAIN_PATH"
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-
-          # Install provisioning profile
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | tr -d '[:space:]' | base64 --decode > "$PP_PATH"
           PP_UUID=$(security cms -D -i "$PP_PATH" | \
             plutil -extract UUID xml1 -o - - | \
             sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
-          echo "Installed provisioning profile: $PP_UUID"
+          echo "Installed provisioning profile UUID: $PP_UUID"
 
       # ── 7. Archive ───────────────────────────────────────────────────────────
       - name: Archive app
