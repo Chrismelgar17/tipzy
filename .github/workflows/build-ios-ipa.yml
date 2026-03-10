@@ -1,36 +1,39 @@
 name: Build iOS IPA
 
 # ─────────────────────────────────────────────────────────────────────────────
-# REQUIRED GitHub Repository Secrets (Settings → Secrets → Actions):
+# REQUIRED GitHub Repository Secret (Settings → Secrets → Actions):
 #
-#   IOS_CERTIFICATE_BASE64        – base64 of your .p12 distribution certificate
-#                                   Generate with:
-#                                   base64 -i Certificates.p12 | pbcopy   (macOS)
+#   EXPO_TOKEN  – your Expo personal access token
+#                 Generate at: https://expo.dev/accounts/[your-account]/settings/access-tokens
 #
-#   IOS_CERTIFICATE_PASSWORD      – password you set when exporting the .p12
+# EAS handles all Apple certificates and provisioning profiles automatically.
+# On first run you will need to log in to your Apple account interactively
+# (run `npx eas build --platform ios --profile preview` locally once to set up
+# credentials, then subsequent runs here are fully automated).
 #
-#   IOS_PROVISIONING_PROFILE_BASE64 – base64 of your .mobileprovision file
-#                                     base64 -i YourApp.mobileprovision | pbcopy
-#
-#   APPLE_TEAM_ID                 – your 10-char Apple Team ID (e.g. ABC123XYZ9)
-#
-# Distribution type is "ad-hoc" by default (install on registered devices).
-# Change EXPORT_METHOD below to "app-store" for TestFlight / App Store.
+# Build profile is "preview" (internal distribution / ad-hoc).
+# Change EAS_BUILD_PROFILE below to "production" for App Store / TestFlight.
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: 'EAS build profile'
+        required: false
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
 
 env:
-  EXPORT_METHOD: ad-hoc          # ad-hoc | app-store | enterprise | development
-  BUNDLE_ID: com.tipzy.app       # must match your Apple provisioning profile
+  EAS_BUILD_PROFILE: ${{ inputs.profile || 'preview' }}
 
 jobs:
   build:
-    runs-on: macos-latest
-    timeout-minutes: 90
-    permissions:
-      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
       # ── 1. Checkout ──────────────────────────────────────────────────────────
@@ -42,126 +45,26 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
-      # ── 3. Install JS deps ───────────────────────────────────────────────────
+      # ── 3. Install Expo & EAS CLI ────────────────────────────────────────────
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # ── 4. Install JS dependencies ───────────────────────────────────────────
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      # ── 3.5 Bake production API URL into the JS bundle ───────────────────────
-      - name: Write production .env
+      # ── 5. Trigger EAS cloud build ───────────────────────────────────────────
+      - name: Build iOS with EAS
         run: |
-          echo "EXPO_PUBLIC_API_URL=https://tipzy-production.up.railway.app" >> .env
-          echo "EXPO_PUBLIC_RORK_API_BASE_URL=https://tipzy-production.up.railway.app" >> .env
-
-      # ── 4. Expo Prebuild ─────────────────────────────────────────────────────
-      - name: Expo Prebuild
+          eas build \
+            --platform ios \
+            --profile "$EAS_BUILD_PROFILE" \
+            --non-interactive \
+            --wait
         env:
-          EXPO_PUBLIC_API_URL: https://tipzy-production.up.railway.app
-          EXPO_PUBLIC_RORK_API_BASE_URL: https://tipzy-production.up.railway.app
-          EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_51T8srNRsR6DpxA5rYEHltF828UIUcVMbFDoliYPnWRF4UsPseddgoN1H0gnWdzcAhPRGxKRG0vKUEHyHRkV8slvR00KL4OlfAi
-        run: npx expo prebuild --platform ios --clean --non-interactive
-
-      # ── 5. CocoaPods ─────────────────────────────────────────────────────────
-      - name: Cache CocoaPods
-        uses: actions/cache@v4
-        with:
-          path: ios/Pods
-          key: pods-${{ hashFiles('ios/Podfile') }}
-          restore-keys: pods-
-
-      - name: Install CocoaPods
-        run: |
-          cd ios
-          pod install --repo-update
-
-      # ── 6. Install Apple certificate & provisioning profile ──────────────────
-      - name: Install certificate
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
-          p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-
-      - name: Install provisioning profile
-        run: |
-          set -eo pipefail
-          PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | tr -d '[:space:]' | base64 --decode > "$PP_PATH"
-          PP_UUID=$(security cms -D -i "$PP_PATH" | \
-            plutil -extract UUID xml1 -o - - | \
-            sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
-          echo "Installed provisioning profile UUID: $PP_UUID"
-
-      # ── 7. Archive ───────────────────────────────────────────────────────────
-      - name: Archive app
-        env:
-          EXPO_PUBLIC_API_URL: https://tipzy-production.up.railway.app
-          EXPO_PUBLIC_RORK_API_BASE_URL: https://tipzy-production.up.railway.app
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -eo pipefail
-          cd ios
-          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
-          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
-          echo "Archiving workspace: $WORKSPACE  scheme: $SCHEME"
-          xcodebuild archive \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphoneos \
-            -archivePath "$GITHUB_WORKSPACE/Tipzy.xcarchive" \
-            -destination "generic/platform=iOS" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CODE_SIGN_STYLE=Manual \
-            ONLY_ACTIVE_ARCH=NO \
-            FORCE_BUNDLING=YES
-
-      # ── 8. Export IPA ────────────────────────────────────────────────────────
-      - name: Export IPA
-        env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -eo pipefail
-
-          # Build ExportOptions.plist dynamically
-          cat > "$GITHUB_WORKSPACE/ExportOptions.plist" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>${EXPORT_METHOD}</string>
-            <key>teamID</key>
-            <string>${APPLE_TEAM_ID}</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>stripSwiftSymbols</key>
-            <true/>
-            <key>compileBitcode</key>
-            <false/>
-          </dict>
-          </plist>
-          EOF
-
-          xcodebuild -exportArchive \
-            -archivePath "$GITHUB_WORKSPACE/Tipzy.xcarchive" \
-            -exportPath "$GITHUB_WORKSPACE/ipa_output" \
-            -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist"
-
-          # Rename to a friendly name
-          IPA=$(find "$GITHUB_WORKSPACE/ipa_output" -name "*.ipa" | head -1)
-          cp "$IPA" "$GITHUB_WORKSPACE/Tipzy.ipa"
-          echo "IPA ready: $GITHUB_WORKSPACE/Tipzy.ipa"
-          ls -lh "$GITHUB_WORKSPACE/Tipzy.ipa"
-
-      # ── 9. Publish as GitHub Release ─────────────────────────────────────────
-      - name: Create GitHub Release with IPA
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="ipa-build-${{ github.run_number }}"
-          gh release create "$TAG" \
-            --title "iOS IPA Build #${{ github.run_number }} (${EXPORT_METHOD})" \
-            --notes "Ad-hoc IPA — install via Apple Configurator 2 or TestFlight (change EXPORT_METHOD to app-store for TestFlight)." \
-            "$GITHUB_WORKSPACE/Tipzy.ipa#Tipzy.ipa"
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
