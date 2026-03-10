@@ -90,6 +90,7 @@ jobs:
           p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
 
       - name: Install provisioning profile
+        id: profile
         run: |
           set -eo pipefail
           PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
@@ -97,6 +98,7 @@ jobs:
           PP_UUID=$(security cms -D -i "$PP_PATH" | plutil -extract UUID xml1 -o - - | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
+          echo "uuid=$PP_UUID" >> "$GITHUB_OUTPUT"
           echo "Installed profile UUID: $PP_UUID"
 
       # ── 8. Archive ───────────────────────────────────────────────────────────
@@ -106,6 +108,8 @@ jobs:
           cd ios
           WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          echo "Workspace: $WORKSPACE  Scheme: $SCHEME"
+          echo "Profile UUID: ${{ steps.profile.outputs.uuid }}"
           xcodebuild archive \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -116,7 +120,17 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
             CODE_SIGN_STYLE=Manual \
-            ONLY_ACTIVE_ARCH=NO
+            CODE_SIGN_IDENTITY="iPhone Distribution" \
+            PROVISIONING_PROFILE="${{ steps.profile.outputs.uuid }}" \
+            PROVISIONING_PROFILE_SPECIFIER="${{ steps.profile.outputs.uuid }}" \
+            ONLY_ACTIVE_ARCH=NO \
+            2>&1 | tee "$GITHUB_WORKSPACE/xcodebuild.log" | grep -E "error:|warning:|note:BUILD|FAILED|SUCCEEDED" || true
+          # Print full log tail on failure
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "=== LAST 100 LINES OF BUILD LOG ==="
+            tail -100 "$GITHUB_WORKSPACE/xcodebuild.log"
+            exit 1
+          fi
 
       # ── 9. Export IPA ────────────────────────────────────────────────────────
       - name: Export IPA
