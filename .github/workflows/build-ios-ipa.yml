@@ -24,14 +24,14 @@ on:
       export_method:
         description: 'Export method'
         required: false
-        default: 'ad-hoc'
+        default: 'app-store'
         type: choice
         options:
-          - ad-hoc
           - app-store
+          - ad-hoc
 
 env:
-  EXPORT_METHOD: ${{ inputs.export_method || 'ad-hoc' }}
+  EXPORT_METHOD: ${{ inputs.export_method || 'app-store' }}
   APPLE_TEAM_ID: 5L78N67U4Z
   BUNDLE_ID: app.rork.nightlife-access-app
 
