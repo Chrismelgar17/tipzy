@@ -124,7 +124,8 @@ jobs:
             PROVISIONING_PROFILE="${{ steps.profile.outputs.uuid }}" \
             PROVISIONING_PROFILE_SPECIFIER="${{ steps.profile.outputs.uuid }}" \
             CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
-            ONLY_ACTIVE_ARCH=NO
+            ONLY_ACTIVE_ARCH=NO \
+            -allowProvisioningUpdates
 
       # ── 9. Export IPA ────────────────────────────────────────────────────────
       - name: Export IPA
