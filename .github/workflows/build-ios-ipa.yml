@@ -90,7 +90,6 @@ jobs:
           p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
 
       - name: Install provisioning profile
-        id: profile
         run: |
           set -eo pipefail
           PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
@@ -98,7 +97,6 @@ jobs:
           PP_UUID=$(security cms -D -i "$PP_PATH" | plutil -extract UUID xml1 -o - - | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
-          echo "uuid=$PP_UUID" >> "$GITHUB_OUTPUT"
           echo "Installed profile UUID: $PP_UUID"
 
       # ── 7.5 Write App Store Connect API key ─────────────────────────────────
@@ -115,7 +113,6 @@ jobs:
           WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
           echo "Workspace: $WORKSPACE  Scheme: $SCHEME"
-          echo "Profile UUID: ${{ steps.profile.outputs.uuid }}"
           xcodebuild archive \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -125,10 +122,7 @@ jobs:
             -destination "generic/platform=iOS" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="iPhone Distribution" \
-            PROVISIONING_PROFILE="${{ steps.profile.outputs.uuid }}" \
-            PROVISIONING_PROFILE_SPECIFIER="${{ steps.profile.outputs.uuid }}" \
+            CODE_SIGN_STYLE=Automatic \
             CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
             ONLY_ACTIVE_ARCH=NO \
             -allowProvisioningUpdates \
@@ -147,7 +141,7 @@ jobs:
           <dict>
             <key>method</key><string>app-store-connect</string>
             <key>teamID</key><string>${APPLE_TEAM_ID}</string>
-            <key>signingStyle</key><string>manual</string>
+            <key>signingStyle</key><string>automatic</string>
             <key>stripSwiftSymbols</key><true/>
             <key>compileBitcode</key><false/>
           </dict>
