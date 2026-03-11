@@ -160,3 +160,18 @@ jobs:
           name: Tipzy-${{ env.EXPORT_METHOD }}-${{ github.run_number }}.ipa
           path: Tipzy.ipa
           retention-days: 30
+
+      # ── 11. Upload to TestFlight ─────────────────────────────────────────────
+      - name: Upload to TestFlight
+        if: env.EXPORT_METHOD == 'app-store'
+        run: |
+          set -eo pipefail
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | tr -d '[:space:]' | base64 --decode \
+            > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$GITHUB_WORKSPACE/Tipzy.ipa" \
+            --apiKey "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            --verbose
