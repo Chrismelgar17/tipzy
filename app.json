@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Tipzy",
-    "slug": "nightlife-access-app",
+    "slug": "tipzy",
     "privacy": "public",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -48,11 +48,6 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.VIBRATE",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ]
@@ -63,9 +58,12 @@
       "output": "single"
     },
     "plugins": [
-      ["@react-native-google-signin/google-signin", {
-        "iosUrlScheme": "com.googleusercontent.apps.938930558037-4fgl84q262kk9a130vhssc16sh5emi4l"
-      }],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.938930558037-4fgl84q262kk9a130vhssc16sh5emi4l"
+        }
+      ],
       [
         "expo-router",
         {
@@ -104,7 +102,7 @@
         "origin": "https://tipzy-two.vercel.app"
       },
       "eas": {
-        "projectId": "10a82bc5-408f-4dbe-b305-5c1e8d59e321"
+        "projectId": "c61029dc-7669-4d26-8595-e73b426e8d4c"
       }
     },
     "runtimeVersion": {
@@ -112,6 +110,7 @@
     },
     "updates": {
       "url": "https://u.expo.dev/10a82bc5-408f-4dbe-b305-5c1e8d59e321"
-    }
+    },
+    "owner": "tipzytests-organization"
   }
 }
