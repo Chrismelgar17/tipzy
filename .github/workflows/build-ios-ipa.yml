@@ -89,16 +89,6 @@ jobs:
           p12-file-base64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
 
-      - name: Install provisioning profile
-        run: |
-          set -eo pipefail
-          PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | tr -d '[:space:]' | base64 --decode > "$PP_PATH"
-          PP_UUID=$(security cms -D -i "$PP_PATH" | plutil -extract UUID xml1 -o - - | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
-          echo "Installed profile UUID: $PP_UUID"
-
       # ── 7.5 Write App Store Connect API key ─────────────────────────────────
       - name: Write App Store Connect API key
         run: |
