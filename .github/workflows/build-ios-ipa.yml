@@ -156,7 +156,11 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath "$GITHUB_WORKSPACE/Tipzy.xcarchive" \
             -exportPath "$GITHUB_WORKSPACE/ipa_output" \
-            -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist"
+            -exportOptionsPlist "$GITHUB_WORKSPACE/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/apikeys/AuthKey_24LVMX6N79.p8" \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
           IPA=$(find "$GITHUB_WORKSPACE/ipa_output" -name "*.ipa" | head -1)
           cp "$IPA" "$GITHUB_WORKSPACE/Tipzy.ipa"
           ls -lh "$GITHUB_WORKSPACE/Tipzy.ipa"
