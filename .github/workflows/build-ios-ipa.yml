@@ -101,6 +101,12 @@ jobs:
           echo "uuid=$PP_UUID" >> "$GITHUB_OUTPUT"
           echo "Installed profile UUID: $PP_UUID"
 
+      # ── 7.5 Write App Store Connect API key ─────────────────────────────────
+      - name: Write App Store Connect API key
+        run: |
+          mkdir -p "$RUNNER_TEMP/apikeys"
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | tr -d '[:space:]' | base64 --decode > "$RUNNER_TEMP/apikeys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8"
+
       # ── 8. Archive ───────────────────────────────────────────────────────────
       - name: Archive app
         run: |
@@ -125,7 +131,10 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="${{ steps.profile.outputs.uuid }}" \
             CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
             ONLY_ACTIVE_ARCH=NO \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/apikeys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8" \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
 
       # ── 9. Export IPA ────────────────────────────────────────────────────────
       - name: Export IPA
