@@ -24,6 +24,7 @@ import {
   Share2,
   Calendar,
   Globe,
+  Phone,
   ChevronRight,
 } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
@@ -287,6 +288,18 @@ export default function VenueDetailScreen() {
             >
               <Globe size={18} color={theme.colors.purple} />
               <Text style={styles.websiteText} numberOfLines={1}>{venue.website}</Text>
+              <ChevronRight size={16} color={theme.colors.text.tertiary} />
+            </TouchableOpacity>
+          ) : null}
+
+          {/* Phone */}
+          {venue.phone ? (
+            <TouchableOpacity
+              style={styles.websiteButton}
+              onPress={() => Linking.openURL(`tel:${venue.phone}`)}
+            >
+              <Phone size={18} color={theme.colors.purple} />
+              <Text style={styles.websiteText} numberOfLines={1}>{venue.phone}</Text>
               <ChevronRight size={16} color={theme.colors.text.tertiary} />
             </TouchableOpacity>
           ) : null}

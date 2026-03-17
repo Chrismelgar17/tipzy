@@ -30,6 +30,7 @@ import Stripe from "stripe";
 import { requireAuth } from "../auth";
 import { query } from "../db";
 import type { DbSubscription, DbUserPaymentMethod } from "../db";
+import { sendPaymentSuccessEmail } from "../email";
 
 // ─── Lazy Stripe client ───────────────────────────────────────────────────────
 // Instantiated on first use so the server starts even when STRIPE_SECRET_KEY
@@ -698,6 +699,33 @@ stripeRouter.post("/webhook", async (c) => {
             reason: `Invoice ${inv.id} payment succeeded`,
             metadata: { stripeInvoiceId: inv.id },
           });
+
+          // Send payment confirmation email
+          try {
+            const userRow = (await query<{ email: string; name: string }>(
+              "SELECT email, name FROM users WHERE id = $1",
+              [subRowS.user_id],
+            )).rows[0];
+            const subRow = subId
+              ? (await query<{ plan: string; current_period_end: string | null }>(
+                  "SELECT plan, current_period_end FROM subscriptions WHERE stripe_subscription_id = $1",
+                  [subId],
+                )).rows[0]
+              : null;
+            if (userRow) {
+              await sendPaymentSuccessEmail({
+                to: userRow.email,
+                name: userRow.name,
+                plan: subRow?.plan ?? "customer_monthly",
+                amountCents: inv.amount_paid,
+                currency: inv.currency,
+                invoiceId: inv.id,
+                periodEnd: subRow?.current_period_end ?? null,
+              });
+            }
+          } catch (emailErr: any) {
+            console.error("[stripe/webhook] Payment email error:", emailErr?.message);
+          }
         }
         break;
       }

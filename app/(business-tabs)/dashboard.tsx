@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -661,40 +661,6 @@ export default function BusinessDashboard() {
               {getChartData().map((item, index) => (
                 <Text key={index} style={styles.chartLabel}>{item.label}</Text>
               ))}
-            </View>
-          </View>
-
-          {/* â”€â”€ Quick actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-          <View style={styles.quickActions}>
-            <Text style={styles.quickActionsTitle}>Quick Actions</Text>
-            <View style={styles.actionGrid}>
-              <TouchableOpacity style={styles.actionButton} testID="create-offer-action" onPress={() => router.push('/(business-tabs)/add')}>
-                <View style={styles.actionIcon}>
-                  <BarChart3 size={24} color={theme.colors.purple} />
-                </View>
-                <Text style={styles.actionText}>Create Offer</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionButton} testID="create-event-action" onPress={() => router.push('/(business-tabs)/add')}>
-                <View style={styles.actionIcon}>
-                  <Calendar size={24} color={theme.colors.cyan} />
-                </View>
-                <Text style={styles.actionText}>Create Event</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionButton} testID="view-customers-action" onPress={() => router.push('/(business-tabs)/orders')}>
-                <View style={styles.actionIcon}>
-                  <Users size={24} color={theme.colors.success} />
-                </View>
-                <Text style={styles.actionText}>View Customers</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionButton} testID="analytics-action" onPress={() => { setSelectedBar(null); }}>
-                <View style={styles.actionIcon}>
-                  <Eye size={24} color={theme.colors.warning} />
-                </View>
-                <Text style={styles.actionText}>Analytics</Text>
-              </TouchableOpacity>
             </View>
           </View>
 

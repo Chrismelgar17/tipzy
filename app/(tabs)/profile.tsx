@@ -14,7 +14,6 @@ import {
   Clock,
   Heart,
   Settings,
-  CreditCard,
   Bell,
   Shield,
   LogOut,
@@ -313,13 +312,6 @@ export default function ProfileScreen() {
       value: `${user?.favorites.length || 0} venues`,
       onPress: () => router.push('/favorites' as any),
     },
-    {
-      icon: CreditCard,
-      label: 'Payment Methods',
-      value: '',
-      onPress: () => router.push('/payment-methods' as any),
-    },
-
     {
       icon: Bell,
       label: 'Notifications',

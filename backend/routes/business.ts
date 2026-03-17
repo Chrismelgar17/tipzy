@@ -910,10 +910,10 @@ business.patch("/events/:id", requireAuth, requireRole("business", "admin"), asy
   const userId = (c as any).get("userId");
   const userRole = (c as any).get("role");
 
-  let body: { name?: string; date?: string; time?: string; description?: string };
+  let body: { name?: string; date?: string; time?: string; description?: string; image?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
 
-  const { name, date, time, description } = body;
+  const { name, date, time, description, image } = body;
   if (!name?.trim() || !date?.trim() || !time?.trim()) {
     return c.json({ error: "name, date, and time are required" }, 400);
   }
@@ -925,9 +925,9 @@ business.patch("/events/:id", requireAuth, requireRole("business", "admin"), asy
   if (check === "forbidden") return c.json({ error: "Forbidden" }, 403);
 
   const updated = await query<DbEvent>(
-    `UPDATE events SET name = $1, event_date = $2, event_time = $3, description = $4, updated_at = now()
-     WHERE id = $5 RETURNING *`,
-    [name.trim(), date.trim(), time.trim(), description ?? null, eventId],
+    `UPDATE events SET name = $1, event_date = $2, event_time = $3, description = $4, image = $5, updated_at = now()
+     WHERE id = $6 RETURNING *`,
+    [name.trim(), date.trim(), time.trim(), description ?? null, image ?? null, eventId],
   );
   return c.json({ event: updated.rows[0] });
 });

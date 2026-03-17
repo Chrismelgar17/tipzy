@@ -181,12 +181,16 @@ venues.get("/:id/events", async (c) => {
 // GET /api/venues/:id – single approved venue
 venues.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const res = await query<DbVenue>(
-    `SELECT * FROM venues WHERE id = $1 AND status = 'approved'`,
+  const res = await query<DbVenue & { owner_phone: string | null }>(
+    `SELECT v.*, u.phone AS owner_phone
+     FROM venues v
+     JOIN users u ON u.id = v.owner_user_id
+     WHERE v.id = $1 AND v.status = 'approved'`,
     [id],
   );
   if (!res.rows[0]) return c.json({ error: "Venue not found" }, 404);
-  return c.json(rowToVenue(res.rows[0]));
+  const row = res.rows[0];
+  return c.json({ ...rowToVenue(row), phone: row.owner_phone ?? null });
 });
 
 // POST /api/venues/:id/view – record a customer view (public, auth optional)

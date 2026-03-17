@@ -744,3 +744,79 @@ export async function sendSponsorRejectedEmail(
   });
 }
 
+// ─── Payment Success Email ─────────────────────────────────────────────────────
+
+export async function sendPaymentSuccessEmail(params: {
+  to: string;
+  name: string;
+  plan: string;
+  amountCents: number;
+  currency: string;
+  invoiceId: string;
+  periodEnd: string | null;
+}): Promise<MailResult> {
+  const subject = "Tipzy: Payment Confirmed ✓";
+  const planLabel = params.plan
+    .replace("customer_monthly", "Tipzy Plus")
+    .replace("customer_pro", "Tipzy Pro")
+    .replace("business_monthly", "Business Starter")
+    .replace("business_pro", "Business Pro");
+  const amount = `${(params.amountCents / 100).toFixed(2)} ${params.currency.toUpperCase()}`;
+  const renewalDate = params.periodEnd
+    ? new Date(params.periodEnd).toLocaleDateString("en-US", { dateStyle: "long" })
+    : "N/A";
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#0B0B0F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0B0F;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;">
+        <tr><td style="background:linear-gradient(135deg,#10B981 0%,#047857 100%);border-radius:16px 16px 0 0;padding:40px 40px 32px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:8px;">🍸</div>
+          <h1 style="margin:0;color:#FFFFFF;font-size:32px;font-weight:900;letter-spacing:-1px;">TIPZY</h1>
+          <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:14px;letter-spacing:1px;text-transform:uppercase;">Payment Confirmed</p>
+        </td></tr>
+        <tr><td style="background:#16161E;padding:40px 40px 32px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:12px;">✅</div>
+          <h2 style="margin:0 0 8px;color:#FFFFFF;font-size:22px;font-weight:700;">Thank you, ${escHtml(params.name)}!</h2>
+          <p style="margin:0 0 32px;color:#9CA3AF;font-size:15px;line-height:1.6;">Your payment was processed successfully.</p>
+          <div style="background:#0B0B0F;border:1px solid rgba(16,185,129,0.4);border-radius:12px;padding:24px;text-align:left;margin-bottom:32px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="color:#6B7280;font-size:13px;padding-bottom:12px;">Plan</td>
+                <td style="color:#E5E7EB;font-size:14px;font-weight:600;text-align:right;padding-bottom:12px;">${escHtml(planLabel)}</td>
+              </tr>
+              <tr>
+                <td style="color:#6B7280;font-size:13px;padding-bottom:12px;">Amount Paid</td>
+                <td style="color:#10B981;font-size:16px;font-weight:700;text-align:right;padding-bottom:12px;">${escHtml(amount)}</td>
+              </tr>
+              <tr>
+                <td style="color:#6B7280;font-size:13px;padding-bottom:12px;">Invoice</td>
+                <td style="color:#E5E7EB;font-size:13px;text-align:right;padding-bottom:12px;">${escHtml(params.invoiceId)}</td>
+              </tr>
+              <tr>
+                <td style="color:#6B7280;font-size:13px;">Next Renewal</td>
+                <td style="color:#E5E7EB;font-size:13px;font-weight:500;text-align:right;">${escHtml(renewalDate)}</td>
+              </tr>
+            </table>
+          </div>
+          <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.6;">Questions? Email <a href="mailto:tipzy.team@gmail.com" style="color:#10B981;">tipzy.team@gmail.com</a></p>
+        </td></tr>
+        <tr><td style="background:#0F0F14;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;border-top:1px solid rgba(255,255,255,0.05);">
+          <p style="margin:0;color:#374151;font-size:12px;">© 2026 Tipzy · tipzy.team@gmail.com</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  return sendEmail({
+    to: params.to,
+    subject,
+    text: `Hi ${params.name}, your payment of ${amount} for ${planLabel} was confirmed. Invoice: ${params.invoiceId}. Next renewal: ${renewalDate}.`,
+    html,
+  });
+}

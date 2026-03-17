@@ -391,4 +391,38 @@ admin.patch("/venues/:id/featured-rank", async (c) => {
   return c.json({ message: "Featured rank updated", venueId, featuredRank });
 });
 
+// ── POST /api/admin/flush-demo-data ─────────────────────────────────────────
+// Clears all non-admin content: orders, events, offers, venues, non-admin users,
+// subscriptions, payment records, etc. Keeps admin accounts intact.
+// Requires admin role + a { confirm: "FLUSH" } body to prevent accidental calls.
+admin.post("/flush-demo-data", requireAuth, requireRole("admin"), async (c) => {
+  let body: Record<string, unknown>;
+  try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
+
+  if (body.confirm !== "FLUSH") {
+    return c.json({ error: 'Send { "confirm": "FLUSH" } to proceed' }, 400);
+  }
+
+  // Tables to clear (order matters for FK constraints)
+  const steps = [
+    "DELETE FROM payment_audit_log",
+    "DELETE FROM account_actions",
+    "DELETE FROM subscriptions",
+    "DELETE FROM user_payment_methods",
+    "DELETE FROM orders",
+    "DELETE FROM capacity_log",
+    "DELETE FROM venue_views",
+    "DELETE FROM offers",
+    "DELETE FROM events",
+    "DELETE FROM venues",
+    "DELETE FROM users WHERE role != 'admin'",
+  ];
+
+  for (const sql of steps) {
+    try { await query(sql, []); } catch { /* best-effort: table may not exist */ }
+  }
+
+  return c.json({ message: "Demo data flushed. Admin accounts preserved." });
+});
+
 export default admin;

@@ -413,10 +413,9 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
     setUser(appUser);
     setRole('business');
     await AsyncStorage.setItem('user', JSON.stringify(appUser));
-    // Business is always 'pending' right after upgrade — route to user tabs.
-    // The business dashboard becomes available after admin approval on next sign-in.
+    // Business is always 'pending' right after upgrade — route to subscription.
     setTimeout(() => {
-      router.replace('/(tabs)/home' as any);
+      router.replace('/subscription' as any);
     }, 50);
   }, []);
 

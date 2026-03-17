@@ -11,7 +11,10 @@ import {
   SafeAreaView,
   Modal,
   RefreshControl,
+  Image,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '@/hooks/theme-context';
 import { useFocusEffect } from 'expo-router';
 import {
@@ -24,8 +27,11 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
+  ImageIcon,
 } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import api from '@/lib/api';
+import { uploadImageToCloud, isLocalUri } from '@/lib/upload';
 
 interface BusinessEvent {
   id: string;
@@ -45,9 +51,10 @@ interface EventForm {
   date: string;
   time: string;
   description: string;
+  image: string;
 }
 
-const EMPTY_FORM: EventForm = { name: '', date: '', time: '', description: '' };
+const EMPTY_FORM: EventForm = { name: '', date: '', time: '', description: '', image: '' };
 
 function formatDate(dateStr: string) {
   if (!dateStr) return '';
@@ -87,6 +94,11 @@ export default function EventsScreen() {
   const [form, setForm] = useState<EventForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
+  // Date / time picker state
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [pickerDate, setPickerDate] = useState(new Date());
+
   const fetchData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
@@ -121,6 +133,7 @@ export default function EventsScreen() {
       date: event.event_date?.slice(0, 10) ?? '',
       time: event.event_time?.slice(0, 5) ?? '',
       description: event.description ?? '',
+      image: event.image ?? '',
     });
     setModalVisible(true);
   };
@@ -129,6 +142,23 @@ export default function EventsScreen() {
     setModalVisible(false);
     setEditingEvent(null);
     setForm(EMPTY_FORM);
+  };
+
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow photo library access.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setForm(f => ({ ...f, image: result.assets[0].uri }));
+    }
   };
 
   const handleSave = async () => {
@@ -142,6 +172,12 @@ export default function EventsScreen() {
     }
     setSaving(true);
     try {
+      // Upload image if a local file was selected
+      let imageUrl = form.image.trim() || undefined;
+      if (imageUrl && isLocalUri(imageUrl)) {
+        imageUrl = await uploadImageToCloud(imageUrl);
+      }
+
       if (editingEvent) {
         // Edit
         await api.patch(`/business/events/${editingEvent.id}`, {
@@ -149,6 +185,7 @@ export default function EventsScreen() {
           date: form.date.trim(),
           time: form.time.trim(),
           description: form.description.trim() || undefined,
+          image: imageUrl,
         });
         setEvents(prev =>
           prev.map(e =>
@@ -159,6 +196,7 @@ export default function EventsScreen() {
                   event_date: form.date.trim(),
                   event_time: form.time.trim(),
                   description: form.description.trim() || null,
+                  image: imageUrl ?? null,
                 }
               : e,
           ),
@@ -172,6 +210,7 @@ export default function EventsScreen() {
           date: form.date.trim(),
           time: form.time.trim(),
           description: form.description.trim() || undefined,
+          image: imageUrl,
         });
         const newEvent: BusinessEvent = res.data?.event ?? {
           id: Date.now().toString(),
@@ -181,7 +220,7 @@ export default function EventsScreen() {
           description: form.description.trim() || null,
           event_date: form.date.trim(),
           event_time: form.time.trim(),
-          image: null,
+          image: imageUrl ?? null,
           status: 'active',
           created_at: new Date().toISOString(),
         };
@@ -447,28 +486,140 @@ export default function EventsScreen() {
               {/* Date */}
               <View style={s.fieldGroup}>
                 <Text style={s.fieldLabel}>Date <Text style={s.required}>*</Text></Text>
-                <TextInput
-                  style={s.input}
-                  placeholder="YYYY-MM-DD  e.g., 2026-03-15"
-                  placeholderTextColor={theme.colors.text.tertiary}
-                  value={form.date}
-                  onChangeText={t => setForm(f => ({ ...f, date: t }))}
-                  keyboardType="numbers-and-punctuation"
-                />
+                <TouchableOpacity
+                  style={s.pickerBtn}
+                  onPress={() => {
+                    const d = form.date ? new Date(form.date) : new Date();
+                    setPickerDate(isNaN(d.getTime()) ? new Date() : d);
+                    setShowDatePicker(true);
+                  }}
+                >
+                  <Calendar size={18} color={theme.colors.purple} />
+                  <Text style={form.date ? s.pickerBtnText : s.pickerBtnPlaceholder}>
+                    {form.date
+                      ? new Date(form.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+                      : 'Select a date'}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               {/* Time */}
               <View style={s.fieldGroup}>
                 <Text style={s.fieldLabel}>Start Time <Text style={s.required}>*</Text></Text>
-                <TextInput
-                  style={s.input}
-                  placeholder="HH:MM  e.g., 22:00"
-                  placeholderTextColor={theme.colors.text.tertiary}
-                  value={form.time}
-                  onChangeText={t => setForm(f => ({ ...f, time: t }))}
-                  keyboardType="numbers-and-punctuation"
-                />
+                <TouchableOpacity
+                  style={s.pickerBtn}
+                  onPress={() => {
+                    const base = new Date();
+                    if (form.time) {
+                      const [h, m] = form.time.split(':').map(Number);
+                      base.setHours(h, m, 0, 0);
+                    }
+                    setPickerDate(base);
+                    setShowTimePicker(true);
+                  }}
+                >
+                  <Clock size={18} color={theme.colors.purple} />
+                  <Text style={form.time ? s.pickerBtnText : s.pickerBtnPlaceholder}>
+                    {form.time ? formatTime(form.time) : 'Select a time'}
+                  </Text>
+                </TouchableOpacity>
               </View>
+
+              {/* Date picker modal (iOS) / inline (Android) */}
+              {showDatePicker && (
+                Platform.OS === 'ios' ? (
+                  <Modal transparent animationType="fade">
+                    <View style={s.pickerOverlay}>
+                      <View style={s.pickerSheet}>
+                        <DateTimePicker
+                          value={pickerDate}
+                          mode="date"
+                          display="spinner"
+                          minimumDate={new Date()}
+                          onChange={(_, d) => { if (d) setPickerDate(d); }}
+                          textColor={theme.colors.text.primary}
+                          themeVariant="dark"
+                        />
+                        <TouchableOpacity
+                          style={s.pickerDoneBtn}
+                          onPress={() => {
+                            const yyyy = pickerDate.getFullYear();
+                            const mm = String(pickerDate.getMonth() + 1).padStart(2, '0');
+                            const dd = String(pickerDate.getDate()).padStart(2, '0');
+                            setForm(f => ({ ...f, date: `${yyyy}-${mm}-${dd}` }));
+                            setShowDatePicker(false);
+                          }}
+                        >
+                          <Text style={s.pickerDoneText}>Done</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Modal>
+                ) : (
+                  <DateTimePicker
+                    value={pickerDate}
+                    mode="date"
+                    display="default"
+                    minimumDate={new Date()}
+                    onChange={(_, d) => {
+                      setShowDatePicker(false);
+                      if (d) {
+                        const yyyy = d.getFullYear();
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const dy = String(d.getDate()).padStart(2, '0');
+                        setForm(f => ({ ...f, date: `${yyyy}-${mm}-${dy}` }));
+                      }
+                    }}
+                  />
+                )
+              )}
+
+              {/* Time picker modal (iOS) / inline (Android) */}
+              {showTimePicker && (
+                Platform.OS === 'ios' ? (
+                  <Modal transparent animationType="fade">
+                    <View style={s.pickerOverlay}>
+                      <View style={s.pickerSheet}>
+                        <DateTimePicker
+                          value={pickerDate}
+                          mode="time"
+                          display="spinner"
+                          is24Hour={false}
+                          onChange={(_, d) => { if (d) setPickerDate(d); }}
+                          textColor={theme.colors.text.primary}
+                          themeVariant="dark"
+                        />
+                        <TouchableOpacity
+                          style={s.pickerDoneBtn}
+                          onPress={() => {
+                            const h = String(pickerDate.getHours()).padStart(2, '0');
+                            const m = String(pickerDate.getMinutes()).padStart(2, '0');
+                            setForm(f => ({ ...f, time: `${h}:${m}` }));
+                            setShowTimePicker(false);
+                          }}
+                        >
+                          <Text style={s.pickerDoneText}>Done</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Modal>
+                ) : (
+                  <DateTimePicker
+                    value={pickerDate}
+                    mode="time"
+                    display="default"
+                    is24Hour={false}
+                    onChange={(_, d) => {
+                      setShowTimePicker(false);
+                      if (d) {
+                        const h = String(d.getHours()).padStart(2, '0');
+                        const m = String(d.getMinutes()).padStart(2, '0');
+                        setForm(f => ({ ...f, time: `${h}:${m}` }));
+                      }
+                    }}
+                  />
+                )
+              )}
 
               {/* Description */}
               <View style={s.fieldGroup}>
@@ -482,6 +633,26 @@ export default function EventsScreen() {
                   multiline
                   numberOfLines={4}
                 />
+              </View>
+
+              {/* Event Image */}
+              <View style={s.fieldGroup}>
+                <Text style={s.fieldLabel}>Event Image</Text>
+                <TouchableOpacity style={s.imagePicker} onPress={handlePickImage} activeOpacity={0.7}>
+                  {form.image ? (
+                    <Image source={{ uri: form.image }} style={s.imagePreview} resizeMode="cover" />
+                  ) : (
+                    <View style={s.imagePickerPlaceholder}>
+                      <ImageIcon size={28} color={theme.colors.text.tertiary} />
+                      <Text style={s.imagePickerText}>Tap to add a photo</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                {form.image ? (
+                  <TouchableOpacity onPress={() => setForm(f => ({ ...f, image: '' }))} style={s.removeImageBtn}>
+                    <Text style={s.removeImageText}>Remove image</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
 
               {/* Save */}
@@ -710,6 +881,80 @@ function makeStyles(theme: any) {
       color: '#fff',
       fontSize: 16,
       fontWeight: '700',
+    },
+    pickerBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: theme.colors.card,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+    },
+    pickerBtnText: {
+      flex: 1,
+      fontSize: 15,
+      color: theme.colors.text.primary,
+    },
+    pickerBtnPlaceholder: {
+      flex: 1,
+      fontSize: 15,
+      color: theme.colors.text.tertiary,
+    },
+    pickerOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'flex-end',
+    },
+    pickerSheet: {
+      backgroundColor: theme.colors.card,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingBottom: 32,
+    },
+    pickerDoneBtn: {
+      alignSelf: 'flex-end',
+      marginRight: 20,
+      marginTop: 4,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+    },
+    pickerDoneText: {
+      color: theme.colors.purple,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    imagePicker: {
+      borderRadius: 12,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderStyle: 'dashed',
+    },
+    imagePreview: {
+      width: '100%',
+      height: 160,
+    },
+    imagePickerPlaceholder: {
+      height: 120,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: theme.colors.card,
+    },
+    imagePickerText: {
+      color: theme.colors.text.tertiary,
+      fontSize: 14,
+    },
+    removeImageBtn: {
+      marginTop: 6,
+      alignSelf: 'flex-end',
+    },
+    removeImageText: {
+      color: theme.colors.error,
+      fontSize: 13,
     },
     // ── Calendar styles ───────────────────────────────────────────────────────
     calendarBox: {

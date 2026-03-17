@@ -148,6 +148,31 @@ export default function AdminScreen() {
     }
   };
 
+  const handleFlushDemoData = () => {
+    Alert.alert(
+      '⚠️ Flush Demo Data',
+      'This will permanently delete ALL venues, events, orders, users (except admins), and other demo content. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Everything',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.post('/admin/flush-demo-data', { confirm: 'FLUSH' });
+              setVenues([]);
+              setApiVenues([]);
+              setPendingBusinesses([]);
+              Alert.alert('Done', 'Demo data cleared. Admin accounts are preserved.');
+            } catch {
+              Alert.alert('Error', 'Failed to flush data. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleSaveRank = async () => {
     if (!rankVenue) return;
     const rank = parseInt(newRank, 10);
@@ -451,7 +476,21 @@ export default function AdminScreen() {
         </View>
       </ScrollView>
 
-      {/* Add Venue Modal */}
+        {/* Danger Zone */}
+        <View style={[styles.section, { marginBottom: 32 }]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.error }]}>Danger Zone</Text>
+          <TouchableOpacity
+            style={[styles.approveButton, { backgroundColor: theme.colors.error, borderRadius: 12, paddingVertical: 14, justifyContent: 'center', flexDirection: 'row', gap: 8 }]}
+            onPress={handleFlushDemoData}
+          >
+            <Trash2 size={18} color="#fff" />
+            <Text style={[styles.bizActionText, { fontSize: 15 }]}>Flush All Demo Data</Text>
+          </TouchableOpacity>
+          <Text style={[styles.bizEmail, { marginTop: 8, textAlign: 'center' }]}>
+            Removes all venues, events, orders and non-admin users permanently.
+          </Text>
+        </View>
+      </ScrollView>
       <Modal visible={showAddVenue} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>

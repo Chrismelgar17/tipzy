@@ -59,6 +59,7 @@ export interface Venue {
   rating?: number;
   description?: string | null;
   website?: string | null;
+  phone?: string | null;
 }
 
 export interface Event {
