@@ -474,7 +474,6 @@ export default function AdminScreen() {
             </View>
           </ScrollView>
         </View>
-      </ScrollView>
 
         {/* Danger Zone */}
         <View style={[styles.section, { marginBottom: 32 }]}>
