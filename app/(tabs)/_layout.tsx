@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Home, Map, User, Ticket, LifeBuoy } from "lucide-react-native";
+import { Home, Map, User, Ticket } from "lucide-react-native";
 import React from "react";
 import { theme } from "@/constants/theme";
 import { useAuth } from "@/hooks/auth-context";
@@ -61,11 +61,7 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="support"
-          options={{
-            title: "Support",
-            tabBarIcon: ({ color, size }) => <LifeBuoy size={size} color={color} />,
-            headerTitle: "Help & Support",
-          }}
+          options={{ href: null }}
         />
         <Tabs.Screen
           name="profile"

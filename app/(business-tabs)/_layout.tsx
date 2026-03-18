@@ -1,5 +1,5 @@
 import { Tabs, Redirect, router } from "expo-router";
-import { Home, Plus, CalendarDays, Settings, ArrowLeft, LifeBuoy } from "lucide-react-native";
+import { Home, Plus, CalendarDays, Settings, ArrowLeft } from "lucide-react-native";
 import React from "react";
 import { theme } from "@/constants/theme";
 import { useAuth } from "@/hooks/auth-context";
@@ -110,11 +110,7 @@ export default function BusinessTabLayout() {
       />
       <Tabs.Screen
         name="support"
-        options={{
-          title: "Support",
-          tabBarIcon: ({ color, size }) => <LifeBuoy size={size} color={color} />,
-          headerTitle: "Business Support",
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="settings"
