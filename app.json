@@ -17,6 +17,9 @@
       "supportsTablet": true,
       "usesAppleSignIn": true,
       "bundleIdentifier": "app.rork.nightlife-access-app",
+      "entitlements": {
+        "com.apple.developer.in-app-payments": ["merchant.app.rork.nightlife-access-app"]
+      },
       "config": {
         "googleMapsApiKey": "AIzaSyBQJqxQO3mionv0MzjRQJjaupydexFozqI"
       },

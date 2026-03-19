@@ -128,7 +128,6 @@ export default function TermsConditionsScreen() {
               If you have any questions about these Terms and Conditions, please contact us at:
             </Text>
             <Text style={styles.contactInfo}>Email: tipzy.team@gmail.com</Text>
-            <Text style={styles.contactInfo}>Address: [Your Business Address]</Text>
           </View>
         </ScrollView>
       </SafeAreaView>

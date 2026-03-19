@@ -8,6 +8,7 @@ import {
   Switch,
   Linking,
   Alert,
+  Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '@/lib/api';
@@ -29,6 +30,7 @@ import {
   Users,
   CreditCard,
   Trash2,
+  HelpCircle,
 } from 'lucide-react-native';
 
 interface SettingItem {
@@ -47,6 +49,7 @@ export default function BusinessSettingsScreen() {
   const { theme } = useTheme();
   const { signOut } = useAuth();
   const [notifications, setNotifications] = useState(true);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -81,7 +84,7 @@ export default function BusinessSettingsScreen() {
   };
 
   const handleContactUs = () => {
-    Linking.openURL('mailto:tipzy.team@gmail.com?subject=Business Support');
+    setShowHelpModal(true);
   };
 
   const handleRateApp = () => {
@@ -199,9 +202,9 @@ export default function BusinessSettingsScreen() {
       items: [
         {
           id: 'contact',
-          title: 'Contact Us',
-          description: 'Get help from our support team',
-          icon: <Mail size={24} color={theme.colors.purple} />,
+          title: 'Help & Support',
+          description: 'FAQs and contact our support team',
+          icon: <HelpCircle size={24} color={theme.colors.purple} />,
           type: 'link' as const,
           onPress: handleContactUs,
           testId: 'contact-button',
@@ -423,6 +426,7 @@ export default function BusinessSettingsScreen() {
   });
 
   return (
+    <>
     <View style={styles.container}>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.scrollContent}>
@@ -500,5 +504,119 @@ export default function BusinessSettingsScreen() {
         </View>
       </ScrollView>
     </View>
+
+      {/* Help & Support Modal */}
+      <Modal
+        visible={showHelpModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowHelpModal(false)}
+      >
+        <View style={helpStyles.container}>
+          <View style={helpStyles.header}>
+            <TouchableOpacity onPress={() => setShowHelpModal(false)}>
+              <Text style={helpStyles.doneBtn}>Done</Text>
+            </TouchableOpacity>
+            <Text style={helpStyles.title}>Help & Support</Text>
+            <View style={{ width: 48 }} />
+          </View>
+
+          <ScrollView>
+            <View style={helpStyles.section}>
+              <Text style={helpStyles.sectionTitle}>Frequently Asked Questions</Text>
+
+              <View style={helpStyles.faqItem}>
+                <Text style={helpStyles.faqQ}>How do I update my venue photos?</Text>
+                <Text style={helpStyles.faqA}>Go to Business Profile and tap Edit Profile. You can upload new photos or remove existing ones.</Text>
+              </View>
+              <View style={helpStyles.faqItem}>
+                <Text style={helpStyles.faqQ}>How do subscriptions work?</Text>
+                <Text style={helpStyles.faqA}>Choose a plan in Plan & Subscription. Your plan unlocks ticket sales, event creation, and analytics.</Text>
+              </View>
+              <View style={helpStyles.faqItem}>
+                <Text style={helpStyles.faqQ}>How do I track orders?</Text>
+                <Text style={helpStyles.faqA}>All ticket purchases are visible in the Orders tab with real-time status updates.</Text>
+              </View>
+              <View style={helpStyles.faqItem}>
+                <Text style={helpStyles.faqQ}>How do I update the live crowd level?</Text>
+                <Text style={helpStyles.faqA}>Use the capacity controls on your Dashboard to increase or decrease the current guest count.</Text>
+              </View>
+              <View style={helpStyles.faqItem}>
+                <Text style={helpStyles.faqQ}>How do I cancel my subscription?</Text>
+                <Text style={helpStyles.faqA}>Contact our support team at tipzy.team@gmail.com to cancel or modify your plan.</Text>
+              </View>
+            </View>
+
+            <View style={helpStyles.section}>
+              <Text style={helpStyles.sectionTitle}>Contact Support</Text>
+              <Text style={helpStyles.body}>If you need additional help, reach our support team:</Text>
+              <Text style={helpStyles.detail}>📧 tipzy.team@gmail.com</Text>
+              <Text style={helpStyles.detail}>🕒 Mon – Fri, 9 AM – 6 PM EST</Text>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+    </>
   );
 }
+
+const helpStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  doneBtn: {
+    fontSize: 17,
+    color: '#8b5cf6',
+    fontWeight: '500',
+    width: 48,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  section: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 16,
+  },
+  faqItem: {
+    marginBottom: 16,
+  },
+  faqQ: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  faqA: {
+    fontSize: 14,
+    color: '#aaaaaa',
+    lineHeight: 20,
+  },
+  body: {
+    fontSize: 14,
+    color: '#aaaaaa',
+    marginBottom: 12,
+  },
+  detail: {
+    fontSize: 15,
+    color: '#ffffff',
+    marginBottom: 6,
+  },
+});

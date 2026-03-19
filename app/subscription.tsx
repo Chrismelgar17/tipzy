@@ -12,7 +12,7 @@
  * Card requirement: if no payment method on file, tapping "Start Free Trial"
  * redirects to Payment Methods first.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -162,6 +162,35 @@ export default function SubscriptionScreen() {
   const [starting, setStarting] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
   const [reactivating, setReactivating] = useState(false);
+  const [auditLog, setAuditLog] = useState<Array<{
+    id: string; event_type: string; amount_cents: number | null;
+    currency: string; description: string | null; status: string; created_at: string;
+  }>>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+
+  // Detect business user (pending OR approved)
+  const isBusinessUser = user?.role === 'business';
+
+  // Plans filtered by user type
+  const visiblePlans = isBusinessUser
+    ? PLANS.filter(p => p.key.startsWith('business'))
+    : PLANS.filter(p => p.key.startsWith('customer'));
+
+  // Load payment history when a subscription exists
+  const loadAuditLog = useCallback(async () => {
+    if (!subscription) return;
+    setAuditLoading(true);
+    try {
+      const data = await (paymentService as any).getPaymentHistory();
+      setAuditLog(data.entries ?? []);
+    } catch {
+      setAuditLog([]);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [subscription]);
+
+  useEffect(() => { void loadAuditLog(); }, [loadAuditLog]);
 
   // ── Start trial flow ────────────────────────────────────────────────────────
   const handleStartTrial = async (plan: string) => {
@@ -196,7 +225,7 @@ export default function SubscriptionScreen() {
 
     setStarting(plan);
     try {
-      await startTrial(plan);
+      await startTrial(plan as Parameters<typeof startTrial>[0]);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert(
         'Trial Started! 🎉',
@@ -404,7 +433,7 @@ export default function SubscriptionScreen() {
               </Text>
             </View>
 
-            {PLANS.map((plan) => {
+            {visiblePlans.map((plan) => {
               const PlanIcon = plan.icon;
               const isStarting = starting === plan.key;
 
@@ -475,6 +504,45 @@ export default function SubscriptionScreen() {
               .
             </Text>
           </>
+        )}
+
+        {/* ── Payment history ────────────────────────────────────────────── */}
+        {subscription && (
+          <View style={styles.historySection}>
+            <Text style={styles.historyTitle}>Payment History</Text>
+            {auditLoading ? (
+              <ActivityIndicator color={theme.colors.purple} style={{ marginVertical: 16 }} />
+            ) : auditLog.length === 0 ? (
+              <Text style={styles.historyEmpty}>No transactions yet.</Text>
+            ) : (
+              auditLog.map(entry => (
+                <View key={entry.id} style={styles.historyRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.historyDesc} numberOfLines={1}>
+                      {entry.description ?? entry.event_type}
+                    </Text>
+                    <Text style={styles.historyDate}>
+                      {new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </Text>
+                  </View>
+                  <View style={styles.historyRight}>
+                    <Text style={[
+                      styles.historyAmount,
+                      { color: entry.status === 'failed' ? theme.colors.error : theme.colors.success },
+                    ]}>
+                      {entry.amount_cents !== null
+                        ? `$${(entry.amount_cents / 100).toFixed(2)}`
+                        : '—'}
+                    </Text>
+                    <Text style={[
+                      styles.historyStatus,
+                      { color: entry.status === 'failed' ? theme.colors.error : entry.status === 'succeeded' ? theme.colors.success : theme.colors.text.tertiary },
+                    ]}>{entry.status}</Text>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
         )}
       </ScrollView>
     </>
@@ -756,6 +824,59 @@ function makeStyles(theme: any) {
       marginHorizontal: 24,
       lineHeight: 18,
       marginBottom: 8,
+    },
+    historySection: {
+      margin: 16,
+      marginTop: 4,
+      backgroundColor: theme.colors.card,
+      borderRadius: 16,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginBottom: 32,
+    },
+    historyTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.colors.text.primary,
+      marginBottom: 16,
+    },
+    historyEmpty: {
+      fontSize: 14,
+      color: theme.colors.text.tertiary,
+      textAlign: 'center',
+      marginVertical: 12,
+    },
+    historyRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    historyDesc: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.colors.text.primary,
+      textTransform: 'capitalize',
+    },
+    historyDate: {
+      fontSize: 12,
+      color: theme.colors.text.tertiary,
+      marginTop: 2,
+    },
+    historyRight: {
+      alignItems: 'flex-end',
+    },
+    historyAmount: {
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    historyStatus: {
+      fontSize: 11,
+      fontWeight: '500',
+      textTransform: 'capitalize',
+      marginTop: 2,
     },
   });
 }

@@ -28,14 +28,6 @@ const imageSize = (width - 60) / 2;
 // true = came from the device camera roll (not a sample)
 type GalleryImage = { uri: string; isOwn: boolean };
 
-const SAMPLE_IMAGES = [
-  'https://images.unsplash.com/photo-1566737236500-c8ac43014a8e?w=400',
-  'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=400',
-  'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400',
-  'https://images.unsplash.com/photo-1574391884720-bbc2f89681ed?w=400',
-  'https://images.unsplash.com/photo-1543007630-9710e4a00a20?w=400',
-];
-
 export default function BusinessGalleryScreen() {
   const { theme } = useTheme();
   const router = useRouter();
@@ -49,17 +41,7 @@ export default function BusinessGalleryScreen() {
     return null;
   }
 
-  // Toggle a sample image on/off
-  const handleSampleSelect = (imageUrl: string) => {
-    const already = selectedImages.find(img => img.uri === imageUrl);
-    if (already) {
-      setSelectedImages(prev => prev.filter(img => img.uri !== imageUrl));
-    } else if (selectedImages.length < MAX_PHOTOS) {
-      setSelectedImages(prev => [...prev, { uri: imageUrl, isOwn: false }]);
-    }
-  };
-
-  // Remove any image (sample or own)
+  // Remove any image (own)
   const handleRemove = (uri: string) => {
     setSelectedImages(prev => prev.filter(img => img.uri !== uri));
   };
@@ -94,10 +76,10 @@ export default function BusinessGalleryScreen() {
     if (!canContinue) return;
     setIsUploading(true);
     try {
-      // Upload any own (local) images to cloud, keep sample URLs as-is
+      // Upload all local images to cloud
       const resolvedImages = await Promise.all(
         selectedImages.map(async (img) => {
-          if (img.isOwn && isLocalUri(img.uri)) {
+          if (isLocalUri(img.uri)) {
             const cloudUrl = await uploadImageToCloud(img.uri);
             return cloudUrl;
           }
@@ -316,40 +298,15 @@ export default function BusinessGalleryScreen() {
             Add at least {MIN_PHOTOS} photos that showcase your venue&apos;s atmosphere and style (max {MAX_PHOTOS})
           </Text>
 
-          <Text style={styles.sectionTitle}>Choose from samples:</Text>
+          <Text style={styles.sectionTitle}>Add your venue photos:</Text>
           <View style={styles.imageGrid}>
-            {SAMPLE_IMAGES.map((imageUrl, index) => {
-              const isSelected = !!selectedImages.find(img => img.uri === imageUrl);
-              const selectionOrder = selectedImages.findIndex(img => img.uri === imageUrl);
-              return (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.imageContainer}
-                  onPress={() => handleSampleSelect(imageUrl)}
-                  testID={`sample-image-${index}`}
-                >
-                  <Image source={{ uri: imageUrl }} style={styles.image} />
-                  <View style={[
-                    styles.imageOverlay,
-                    isSelected && styles.selectedOverlay
-                  ]}>
-                    {isSelected && (
-                      <View style={styles.selectionIndicator}>
-                        <Text style={styles.selectionNumber}>{selectionOrder + 1}</Text>
-                      </View>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-            
             <TouchableOpacity
               style={styles.addImageButton}
               onPress={handleAddOwnImage}
               testID="add-image-button"
             >
               <Plus size={32} color={theme.colors.text.secondary} />
-              <Text style={styles.addImageText}>Add your own{'\n'}image</Text>
+              <Text style={styles.addImageText}>Add photos{'\n'}from library</Text>
             </TouchableOpacity>
           </View>
 

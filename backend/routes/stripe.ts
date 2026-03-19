@@ -41,12 +41,24 @@ function getStripe(): Stripe {
     const key = process.env.STRIPE_SECRET_KEY ?? "";
     if (!key) {
       throw new Error(
-        "STRIPE_SECRET_KEY is not set. Add it to your Railway environment variables.",
+        "Stripe is not configured on this server. Add STRIPE_SECRET_KEY to your Railway environment variables.",
       );
     }
     _stripe = new Stripe(key, { apiVersion: "2025-01-27.acacia" as any });
   }
   return _stripe;
+}
+
+/** Returns true when STRIPE_SECRET_KEY is missing and writes a 503 response. */
+function rejectIfStripeUnconfigured(c: any): boolean {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    c.json(
+      { error: "Stripe is not configured on this server. Set STRIPE_SECRET_KEY in Railway → Variables." },
+      503,
+    );
+    return true;
+  }
+  return false;
 }
 
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
@@ -205,6 +217,7 @@ async function writeAccountAction(params: {
 // The client uses clientSecret with @stripe/stripe-react-native PaymentSheet
 // to securely collect and tokenize card / Apple Pay / Google Pay details.
 stripeRouter.post("/setup-intent", requireAuth, async (c) => {
+  if (rejectIfStripeUnconfigured(c)) return;
   const userId = (c as any).get("userId") as string;
   try {
     const customerId = await ensureStripeCustomer(userId);
@@ -224,6 +237,7 @@ stripeRouter.post("/setup-intent", requireAuth, async (c) => {
 // Call this after PaymentSheet confirms the SetupIntent.
 // Fetches all PMs attached to the Stripe customer and upserts them in our DB.
 stripeRouter.post("/sync-methods", requireAuth, async (c) => {
+  if (rejectIfStripeUnconfigured(c)) return;
   const userId = (c as any).get("userId") as string;
   try {
     const customerId = await ensureStripeCustomer(userId);

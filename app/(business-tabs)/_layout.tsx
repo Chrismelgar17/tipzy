@@ -1,26 +1,11 @@
 import { Tabs, Redirect, router } from "expo-router";
-import { Home, Plus, CalendarDays, Settings, ArrowLeft } from "lucide-react-native";
+import { Home, CalendarDays, Settings, ArrowLeft, HelpCircle } from "lucide-react-native";
 import React from "react";
 import { theme } from "@/constants/theme";
 import { useAuth } from "@/hooks/auth-context";
 import { View, StyleSheet, TouchableOpacity } from "react-native";
 
-const styles = StyleSheet.create({
-  addButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.colors.purple,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: theme.colors.purple,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-});
+const styles = StyleSheet.create({});
 
 export default function BusinessTabLayout() {
   const { isAuthenticated, isLoading, isBusiness, isAdmin } = useAuth();
@@ -70,16 +55,7 @@ export default function BusinessTabLayout() {
       />
       <Tabs.Screen
         name="add"
-        options={{
-          title: "",
-          tabBarIcon: ({ color, size, focused }) => (
-            <View style={styles.addButton}>
-              <Plus size={28} color={theme.colors.white} />
-            </View>
-          ),
-          tabBarLabel: () => null,
-          headerShown: false,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="orders"
@@ -110,7 +86,11 @@ export default function BusinessTabLayout() {
       />
       <Tabs.Screen
         name="support"
-        options={{ href: null }}
+        options={{
+          title: "Support",
+          tabBarIcon: ({ color, size }) => <HelpCircle size={size} color={color} />,
+          headerTitle: "Help & Support",
+        }}
       />
       <Tabs.Screen
         name="settings"

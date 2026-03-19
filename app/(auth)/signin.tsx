@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Mail, Lock, Sparkles, Phone, Apple, Chrome } from 'lucide-react-native';
+import { Mail, Lock, Sparkles, Apple, Chrome } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/auth-context';
 import { router } from 'expo-router';
@@ -27,7 +27,6 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [usePhone, setUsePhone] = useState(false);
   const [errors, setErrors] = useState<{
     email?: string;
     password?: string;
@@ -38,26 +37,19 @@ export default function AuthScreen() {
     return emailRegex.test(email);
   };
 
-  const validatePhone = (phone: string): boolean => {
-    const cleaned = phone.replace(/\D/g, '');
-    return cleaned.length === 10;
-  };
-
   const validateForm = (): boolean => {
     const newErrors: typeof errors = {};
-    
+
     if (!email.trim()) {
-      newErrors.email = usePhone ? 'Phone number is required' : 'Email is required';
-    } else if (!usePhone && !validateEmail(email)) {
+      newErrors.email = 'Email is required';
+    } else if (!validateEmail(email)) {
       newErrors.email = 'Please enter a valid email address';
-    } else if (usePhone && !validatePhone(email)) {
-      newErrors.email = 'Please enter a valid phone number';
     }
-    
-    if (!usePhone && !password.trim()) {
+
+    if (!password.trim()) {
       newErrors.password = 'Password is required';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -73,17 +65,7 @@ export default function AuthScreen() {
 
     setIsLoading(true);
     try {
-      if (usePhone) {
-        const normalizedPhone = `+1${email.replace(/\D/g, '')}`;
-        const last4 = normalizedPhone.slice(-4);
-        await signInWithProvider('phone', {
-          phone: normalizedPhone,
-          name: `Phone User ${last4}`,
-          providerSubject: normalizedPhone,
-        });
-      } else {
-        await signIn(email.trim().toLowerCase(), password);
-      }
+      await signIn(email.trim().toLowerCase(), password);
     } catch (error: any) {
       const message = error?.message || 'Invalid credentials';
       if (message.toLowerCase().includes('network') || message.toLowerCase().includes('connection')) {
@@ -345,21 +327,17 @@ export default function AuthScreen() {
 
           <View style={styles.form}>
             <View style={[styles.inputContainer, errors.email ? styles.inputError : null]}>
-              {usePhone ? (
-                <Phone size={20} color={theme.colors.text.tertiary} />
-              ) : (
-                <Mail size={20} color={theme.colors.text.tertiary} />
-              )}
+              <Mail size={20} color={theme.colors.text.tertiary} />
               <TextInput
                 style={styles.input}
-                placeholder={usePhone ? "Enter your phone number" : "Enter your email"}
+                placeholder="Enter your email"
                 placeholderTextColor={theme.colors.text.tertiary}
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
                   setErrors(prev => ({ ...prev, email: undefined }));
                 }}
-                keyboardType={usePhone ? "phone-pad" : "email-address"}
+                keyboardType="email-address"
                 autoCapitalize="none"
                 testID="email-input"
               />
@@ -413,7 +391,7 @@ export default function AuthScreen() {
                 {isLoading ? (
                   <ActivityIndicator color={theme.colors.white} />
                 ) : (
-                  <Text style={styles.signInButtonText}>{usePhone ? 'Continue with Phone' : 'Sign In'}</Text>
+                  <Text style={styles.signInButtonText}>Sign In</Text>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -423,18 +401,6 @@ export default function AuthScreen() {
               <Text style={styles.dividerText}>OR</Text>
               <View style={styles.dividerLine} />
             </View>
-
-            <TouchableOpacity 
-              style={styles.socialButton}
-              onPress={() => {
-                setUsePhone(!usePhone);
-                setErrors({});
-              }}
-            >
-              <Text style={styles.socialButtonText}>
-                {usePhone ? 'Use Email Instead' : 'Use Phone Number'}
-              </Text>
-            </TouchableOpacity>
 
             {Platform.OS === 'ios' && (
               <TouchableOpacity 
@@ -450,8 +416,8 @@ export default function AuthScreen() {
               style={[styles.socialButton, styles.googleButton]}
               onPress={handleGoogleSignIn}
             >
-              <Chrome size={20} color={theme.colors.text.primary} />
-              <Text style={styles.socialButtonText}>Continue with Google</Text>
+              <Chrome size={20} color="#111111" />
+              <Text style={[styles.socialButtonText, { color: '#111111' }]}>Continue with Google</Text>
             </TouchableOpacity>
           </View>
 

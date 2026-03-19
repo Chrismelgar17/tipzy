@@ -22,7 +22,7 @@ import { trpc, trpcClient } from "@/lib/trpc";
 // ─── Safe Stripe Provider ─────────────────────────────────────────────────────
 // @stripe/stripe-react-native is a native module; guard with try/catch so
 // OTA / Expo Go builds don't crash when the native module isn't linked.
-let StripeProvider: React.ComponentType<{ publishableKey: string; children: React.ReactNode }> =
+let StripeProvider: React.ComponentType<{ publishableKey: string; merchantIdentifier?: string; children: React.ReactNode }> =
   ({ children }) => <>{children}</>;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -31,6 +31,7 @@ try {
   // Native Stripe module not linked — PaymentSheet will gracefully alert
 }
 const STRIPE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '';
+const STRIPE_MERCHANT_ID = 'merchant.app.rork.nightlife-access-app';
 
 // Complete any pending web OAuth session (Apple web, etc.) — must be called
 // after all imports so every module is fully initialized first.
@@ -225,7 +226,7 @@ function ThemedRootLayout() {
 
   return (
     <SafeAreaProvider>
-    <StripeProvider publishableKey={STRIPE_KEY}>
+    <StripeProvider publishableKey={STRIPE_KEY} merchantIdentifier={STRIPE_MERCHANT_ID}>
       <GestureHandlerRootView style={rootStyles.container}>
       <ErrorBoundary
         FallbackComponent={ErrorFallback}

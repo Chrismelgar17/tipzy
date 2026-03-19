@@ -182,9 +182,6 @@ export default function VenueDetailScreen() {
                 <Users size={14} color={theme.colors.white} />
                 <Text style={styles.crowdText}>{venue.crowdCount} inside</Text>
               </View>
-              <View style={styles.priceBadge}>
-                <Text style={styles.priceText}>{'$'.repeat(venue.priceLevel)}</Text>
-              </View>
             </View>
           </View>
         </View>
@@ -247,7 +244,7 @@ export default function VenueDetailScreen() {
             <View style={styles.infoItem}>
               <Music size={20} color={theme.colors.text.secondary} />
               <View style={styles.infoText}>
-                <Text style={styles.infoLabel}>Music</Text>
+                <Text style={styles.infoLabel}>Services</Text>
                 <Text style={styles.infoValue}>{venue.genres.join(', ')}</Text>
               </View>
             </View>

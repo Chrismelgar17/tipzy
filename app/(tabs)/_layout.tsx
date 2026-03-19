@@ -61,7 +61,9 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="support"
-          options={{ href: null }}
+          options={{
+            href: null,
+          }}
         />
         <Tabs.Screen
           name="profile"

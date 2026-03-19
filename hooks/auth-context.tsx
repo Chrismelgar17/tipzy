@@ -323,7 +323,7 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
       } else {
         router.replace('/(tabs)/profile' as any);
       }
-    }, 50);
+    }, 300);
   }, []);
 
   const signInBusiness = useCallback(async (email: string, password: string) => {
