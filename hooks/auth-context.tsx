@@ -106,6 +106,9 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
   const [verificationPreviewUrl, setVerificationPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showSignInModal, setShowSignInModal] = useState(false);
+  // Ref so signIn callback can check modal state without it as a dependency
+  const showSignInModalRef = useRef(false);
+  useEffect(() => { showSignInModalRef.current = showSignInModal; }, [showSignInModal]);
   const [signInPrompt, setSignInPrompt] = useState('Sign in to continue');
   const [onboardingState, setOnboardingState] = useState<OnboardingState>({
     userType: null,
@@ -284,11 +287,15 @@ export const [AuthProvider, useAuth] = createContextHook<AuthState>(() => {
       setPendingVerificationEmail(null);
       setVerificationToken(null);
       setVerificationPreviewUrl(null);
-      // Defer navigation so React commits state (setUser/setRole) before the
-      // destination screen mounts — prevents race conditions on the tabs layout.
-      setTimeout(() => {
-        router.replace(routeForRole(appUser.role as UserRole, appUser.businessStatus) as any);
-      }, 50);
+      // When signing in via the in-page SignInModal the user is already on a
+      // valid tab screen — calling router.replace to the same route causes the
+      // tab navigator to remount home and breaks the ScrollView gesture
+      // responder ("frozen home screen" bug). Skip navigation in that case.
+      if (!showSignInModalRef.current) {
+        setTimeout(() => {
+          router.replace(routeForRole(appUser.role as UserRole, appUser.businessStatus) as any);
+        }, 300);
+      }
     } catch (error: any) {
       const message = error?.message?.toLowerCase?.() || '';
       if (message.includes('verify')) {

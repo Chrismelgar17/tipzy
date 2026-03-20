@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  Linking,
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { 
@@ -15,7 +16,8 @@ import {
   HelpCircle,
   Shield,
   FileText,
-  ChevronRight
+  ChevronRight,
+  Star
 } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 
@@ -24,6 +26,10 @@ export default function SettingsScreen() {
 
   const handleHelpSupport = () => {
     setShowHelpModal(true);
+  };
+
+  const handleRateApp = () => {
+    Linking.openURL('https://apps.apple.com/app/tipzy');
   };
 
   const appVersion = '1.0.0';
@@ -95,9 +101,26 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.optionInfo}>
                 <Text style={styles.optionTitle}>Help & Support</Text>
-                <Text style={styles.optionDescription}>Get help or contact support</Text>
+                <Text style={styles.optionDescription}>FAQs and contact our support team</Text>
               </View>
             </View>
+            <ChevronRight size={20} color={theme.colors.text.tertiary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.optionItem}
+            onPress={handleRateApp}
+          >
+            <View style={styles.optionLeft}>
+              <View style={[styles.iconContainer, { backgroundColor: theme.colors.warning + '20' }]}>
+                <Star size={20} color={theme.colors.warning} />
+              </View>
+              <View style={styles.optionInfo}>
+                <Text style={styles.optionTitle}>Rate App</Text>
+                <Text style={styles.optionDescription}>Help us improve by rating the app</Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color={theme.colors.text.tertiary} />
           </TouchableOpacity>
         </View>
 

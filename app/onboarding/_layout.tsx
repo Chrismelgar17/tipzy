@@ -17,6 +17,7 @@ export default function OnboardingLayout() {
       <Stack.Screen name="business-form" />
       <Stack.Screen name="business-gallery" />
       <Stack.Screen name="business-hours" />
+      <Stack.Screen name="business-plans" />
       <Stack.Screen name="business-confirmation" />
     </Stack>
   );

@@ -85,7 +85,7 @@ export default function BusinessHoursScreen() {
       const profile = raw ? JSON.parse(raw) : {};
       await AsyncStorage.setItem('businessProfile', JSON.stringify({ ...profile, workHours }));
     } catch {}
-    router.push('/onboarding/business-confirmation' as any);
+    router.push('/onboarding/business-plans' as any);
   };
 
   const styles = StyleSheet.create({

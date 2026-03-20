@@ -1,5 +1,5 @@
 import { Tabs, Redirect, router } from "expo-router";
-import { Home, CalendarDays, Settings, ArrowLeft, HelpCircle } from "lucide-react-native";
+import { Home, CalendarDays, Settings, ArrowLeft } from "lucide-react-native";
 import React from "react";
 import { theme } from "@/constants/theme";
 import { useAuth } from "@/hooks/auth-context";
@@ -86,11 +86,7 @@ export default function BusinessTabLayout() {
       />
       <Tabs.Screen
         name="support"
-        options={{
-          title: "Support",
-          tabBarIcon: ({ color, size }) => <HelpCircle size={size} color={color} />,
-          headerTitle: "Help & Support",
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="settings"

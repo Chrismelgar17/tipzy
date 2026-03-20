@@ -27,7 +27,7 @@ import {
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CreditCard, Plus, Trash2, Check, Wifi, Apple } from 'lucide-react-native';
+import { CreditCard, Plus, Trash2, Check, Wifi } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import type { PaymentMethod } from '@/types/models';
 import * as paymentService from '@/lib/payment.service';
@@ -115,7 +115,6 @@ export default function PaymentMethodsScreen() {
       const { error: initError } = await stripe.initPaymentSheet({
         setupIntentClientSecret: clientSecret,
         merchantDisplayName: 'Tipzy',
-        applePay: { merchantCountryCode: 'US' },
         googlePay: { merchantCountryCode: 'US', testEnv: __DEV__ },
         style: 'alwaysDark',
         returnURL: 'tipzy://stripe-redirect',
@@ -136,7 +135,15 @@ export default function PaymentMethodsScreen() {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Card Added ✓', 'Your payment method has been saved securely.');
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'Failed to add payment method.');
+      const status = err?.response?.status;
+      if (status === 503 || err?.message?.includes('not configured')) {
+        Alert.alert(
+          'Payments Not Set Up',
+          'Stripe is not yet configured on the server. The backend team needs to add STRIPE_SECRET_KEY in Railway → Variables.',
+        );
+      } else {
+        Alert.alert('Error', err?.message ?? 'Failed to add payment method.');
+      }
     } finally {
       setAdding(false);
     }
@@ -215,7 +222,6 @@ export default function PaymentMethodsScreen() {
           <View style={s.acceptedRow}>
             <CreditCard size={15} color={theme.colors.text.tertiary} />
             <Text style={s.acceptedText}>Cards</Text>
-            {Platform.OS === 'ios' && <><Apple size={15} color={theme.colors.text.tertiary} /><Text style={s.acceptedText}>Apple Pay</Text></>}
             {Platform.OS === 'android' && <><Wifi size={15} color={theme.colors.text.tertiary} /><Text style={s.acceptedText}>Google Pay</Text></>}
           </View>
 
