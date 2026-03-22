@@ -6,6 +6,8 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
@@ -47,21 +49,32 @@ export default function BusinessPlansScreen() {
   const { theme } = useTheme();
   const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
 
   const handleSelect = (key: string) => {
     setSelectedPlan(key);
   };
 
   const handleContinue = async () => {
+    if (!selectedPlan) {
+      Alert.alert('Plan Required', 'Please select a plan to continue.');
+      return;
+    }
+
+    setIsChecking(true);
     try {
       const raw = await AsyncStorage.getItem('businessProfile');
       const profile = raw ? JSON.parse(raw) : {};
       await AsyncStorage.setItem(
         'businessProfile',
-        JSON.stringify({ ...profile, selectedPlan: selectedPlan ?? 'business_monthly' }),
+        JSON.stringify({ ...profile, selectedPlan }),
       );
-    } catch {}
-    router.push('/onboarding/business-confirmation' as any);
+      router.push('/payment-methods?fromOnboarding=true' as any);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Something went wrong. Please try again.');
+    } finally {
+      setIsChecking(false);
+    }
   };
 
   const styles = StyleSheet.create({
@@ -178,14 +191,6 @@ export default function BusinessPlansScreen() {
       fontSize: 17,
       fontWeight: '700',
     },
-    skipButton: {
-      alignItems: 'center',
-      paddingVertical: 14,
-    },
-    skipButtonText: {
-      color: theme.colors.text.tertiary,
-      fontSize: 14,
-    },
   });
 
   return (
@@ -265,19 +270,17 @@ export default function BusinessPlansScreen() {
           </View>
 
           <TouchableOpacity
-            style={styles.continueButton}
+            style={[styles.continueButton, (!selectedPlan || isChecking) && { opacity: 0.5 }]}
             onPress={handleContinue}
+            disabled={!selectedPlan || isChecking}
           >
-            <Text style={styles.continueButtonText}>
-              {selectedPlan ? 'Continue with Selected Plan →' : 'Continue →'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.skipButton}
-            onPress={() => router.push('/onboarding/business-confirmation' as any)}
-          >
-            <Text style={styles.skipButtonText}>Decide later</Text>
+            {isChecking ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.continueButtonText}>
+                {selectedPlan ? 'Continue with Selected Plan →' : 'Select a Plan to Continue'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>

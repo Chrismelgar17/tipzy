@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
 import { CheckCircle, Clock, Mail, ArrowLeft } from 'lucide-react-native';
+import * as paymentService from '@/lib/payment.service';
 
 export default function BusinessConfirmationScreen() {
   const { theme } = useTheme();
@@ -38,6 +39,31 @@ export default function BusinessConfirmationScreen() {
       }
 
       const profile = JSON.parse(profileRaw);
+
+      // If a plan was selected, start the trial before registering
+      if (profile.selectedPlan) {
+        try {
+          await paymentService.startTrial(profile.selectedPlan);
+        } catch (trialErr: any) {
+          const code = trialErr?.response?.data?.code;
+          if (code === 'no_payment_method') {
+            Alert.alert(
+              'Payment Method Required',
+              'Please add a payment method before completing registration.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Add Card', onPress: () => router.push('/payment-methods' as any) },
+              ],
+            );
+            return;
+          }
+          // If already subscribed or other non-fatal error, continue registration
+          if (code !== 'already_subscribed') {
+            console.warn('[BusinessConfirmation] Trial start warning:', trialErr?.message);
+          }
+        }
+      }
+
       const phone = profile.phone ? `+1${profile.phone.replace(/\D/g, '')}` : undefined;
 
       // Convert workHours {isOpen, openTime, closeTime} → {open, close} for API

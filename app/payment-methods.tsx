@@ -25,7 +25,7 @@ import {
   Platform,
   RefreshControl,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CreditCard, Plus, Trash2, Check, Wifi } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
@@ -65,6 +65,8 @@ function BrandLabel({ brand }: { brand?: string | null }) {
 export default function PaymentMethodsScreen() {
   const insets = useSafeAreaInsets();
   const stripe = _useStripe?.();
+  const { fromOnboarding } = useLocalSearchParams<{ fromOnboarding?: string }>();
+  const isOnboarding = fromOnboarding === 'true';
 
   const [methods, setMethods]       = useState<PaymentMethod[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -196,7 +198,7 @@ export default function PaymentMethodsScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'Payment Methods',
+          title: isOnboarding ? 'Set Up Payment Method' : 'Payment Methods',
           headerStyle: { backgroundColor: theme.colors.background },
           headerTintColor: theme.colors.text.primary,
         }}
@@ -277,8 +279,25 @@ export default function PaymentMethodsScreen() {
             </View>
           )}
 
-          {/* Start trial CTA */}
-          {methods.length > 0 && (
+          {/* Onboarding continue button */}
+          {isOnboarding && (
+            <TouchableOpacity
+              style={[s.trialCta, methods.length === 0 && { opacity: 0.5 }]}
+              onPress={() => {
+                if (methods.length === 0) {
+                  Alert.alert('Add a Card First', 'Please add a payment method before continuing. You won\'t be charged until after your free trial ends.');
+                  return;
+                }
+                router.push('/onboarding/business-confirmation' as any);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={s.trialCtaText}>Continue to Registration →</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Start trial CTA (non-onboarding) */}
+          {!isOnboarding && methods.length > 0 && (
             <TouchableOpacity style={s.trialCta} onPress={() => router.push('/subscription' as any)} activeOpacity={0.85}>
               <Text style={s.trialCtaText}>🎉  Start your free trial →</Text>
             </TouchableOpacity>

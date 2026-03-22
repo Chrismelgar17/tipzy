@@ -11,7 +11,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Users, MapPin, Star, Clock, Search } from 'lucide-react-native';
+import { Users, MapPin, Star, Clock, Search, RefreshCw } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { SquareVenueCard } from '@/components/SquareVenueCard';
 import { OfferCard } from '@/components/OfferCard';
@@ -244,15 +244,26 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {/* Fixed Header */}
       <View style={[styles.fixedHeader, { paddingTop: insets.top + 16 }]}>
-        <View style={styles.searchContainer}>
-          <Search size={20} color={theme.colors.text.tertiary} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search bars, clubs, or events..."
-            placeholderTextColor={theme.colors.text.tertiary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+        <View style={styles.searchRow}>
+          <View style={styles.searchContainer}>
+            <Search size={20} color={theme.colors.text.tertiary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search bars, clubs, or events..."
+              placeholderTextColor={theme.colors.text.tertiary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+          <TouchableOpacity
+            style={styles.refreshButton}
+            onPress={handleRefresh}
+            disabled={isRefreshing}
+          >
+            {isRefreshing
+              ? <ActivityIndicator size="small" color={theme.colors.purple} />
+              : <RefreshCw size={20} color={theme.colors.text.secondary} />}
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -512,18 +523,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
   },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    gap: 10,
+  },
   searchContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.cardElevated,
-    marginHorizontal: 16,
-    marginBottom: 16,
     paddingHorizontal: 16,
     borderRadius: 12,
     height: 48,
     gap: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
+  },
+  refreshButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: theme.colors.cardElevated,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchInput: {
     flex: 1,
