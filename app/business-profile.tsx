@@ -272,46 +272,56 @@ export default function BusinessProfileScreen() {
 
       await AsyncStorage.setItem('businessProfile', JSON.stringify(profile));
 
-      // Sync location and details to the backend venue record
+      // Always sync user-level fields (phone, category, name) regardless of venue
+      try {
+        await api.patch('/business/profile', {
+          phone: (formData.phone ?? '').trim() || undefined,
+          category: (formData.category ?? '').trim() || undefined,
+          name: (formData.businessName ?? '').trim() || undefined,
+        });
+      } catch (err) {
+        console.warn('[BusinessProfile] Failed to sync user profile with backend:', err);
+      }
+
+      // Build shared venue payload
+      const dayAbbrev: Record<string, string> = {
+        monday: 'mon', tuesday: 'tue', wednesday: 'wed', thursday: 'thu',
+        friday: 'fri', saturday: 'sat', sunday: 'sun',
+      };
+      const venueHours = Object.entries(formData.workHours).reduce(
+        (acc, [day, val]) => {
+          if (val.isOpen) acc[dayAbbrev[day] ?? day] = { open: val.openTime, close: val.closeTime };
+          return acc;
+        },
+        {} as Record<string, { open: string; close: string }>,
+      );
+      const venuePayload = {
+        name: (formData.businessName ?? '').trim(),
+        address: pickedLocation?.address?.trim() ?? '',
+        lat: pickedLocation?.lat ?? null,
+        lng: pickedLocation?.lng ?? null,
+        capacity: Number(formData.maxCapacity),
+        hours: venueHours,
+        genres: (formData.services ?? '').split(',').map((s: string) => s.trim()).filter((s: string) => s),
+        photos: formData.galleryImages,
+        description: (formData.description ?? '').trim() || null,
+        website: (formData.website ?? '').trim() || null,
+      };
+
       if (venueId) {
+        // PATCH existing venue
         try {
-          const dayAbbrev: Record<string, string> = {
-            monday: 'mon', tuesday: 'tue', wednesday: 'wed', thursday: 'thu',
-            friday: 'fri', saturday: 'sat', sunday: 'sun',
-          };
-          const venueHours = Object.entries(formData.workHours).reduce(
-            (acc, [day, val]) => {
-              if (val.isOpen) acc[dayAbbrev[day] ?? day] = { open: val.openTime, close: val.closeTime };
-              return acc;
-            },
-            {} as Record<string, { open: string; close: string }>,
-          );
-          await api.patch(`/venues/${venueId}`, {
-            name: (formData.businessName ?? '').trim(),
-            address: pickedLocation?.address?.trim() ?? '',
-            lat: pickedLocation?.lat ?? null,
-            lng: pickedLocation?.lng ?? null,
-            capacity: Number(formData.maxCapacity),
-            hours: venueHours,
-            genres: (formData.services ?? '').split(',').map((s: string) => s.trim()).filter((s: string) => s),
-            photos: formData.galleryImages,
-            description: (formData.description ?? '').trim() || null,
-            website: (formData.website ?? '').trim() || null,
-          });
+          await api.patch(`/venues/${venueId}`, venuePayload);
         } catch (err) {
           console.warn('[BusinessProfile] Failed to sync venue with backend:', err);
-          // Don't block the user – the local save succeeded
         }
-
-        // Sync phone and category to the backend user record
+      } else {
+        // First save – create the venue record
         try {
-          await api.patch('/business/profile', {
-            phone: (formData.phone ?? '').trim() || undefined,
-            category: (formData.category ?? '').trim() || undefined,
-            name: (formData.businessName ?? '').trim() || undefined,
-          });
+          const created = await api.post<{ id: string }>('/venues', venuePayload);
+          setVenueId(created.data.id);
         } catch (err) {
-          console.warn('[BusinessProfile] Failed to sync user profile with backend:', err);
+          console.warn('[BusinessProfile] Failed to create venue on backend:', err);
         }
       }
 
