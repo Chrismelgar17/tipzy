@@ -239,6 +239,12 @@ admin.post("/login", async (c) => {
   return c.json({ token: accessToken, refreshToken, user: { id: user.id, email: user.email, name: user.name, role: "admin" } });
 });
 
+// ── GET /api/admin/dashboard – Standalone web admin panel (public, auth client-side) ─
+admin.get("/dashboard", (c) => {
+  const apiBase = (process.env.EXPO_PUBLIC_API_URL ?? process.env.API_BASE_URL ?? "").replace(/\/+$/, "");
+  return c.html(getAdminDashboardHTML(apiBase));
+});
+
 // All admin routes require authentication + admin role
 admin.use("*", requireAuth, requireRole("admin"));
 
@@ -426,3 +432,664 @@ admin.post("/flush-demo-data", requireAuth, requireRole("admin"), async (c) => {
 });
 
 export default admin;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HTML admin dashboard (self-contained SPA)
+// ─────────────────────────────────────────────────────────────────────────────
+function getAdminDashboardHTML(apiBase: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Tipzy Admin</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0f0f1a;--sidebar:#13131f;--card:#1a1a2e;--border:rgba(255,255,255,0.08);
+    --purple:#7c3aed;--purple-light:#a78bfa;--cyan:#06b6d4;--green:#22c55e;
+    --red:#ef4444;--yellow:#f59e0b;--text:#f1f5f9;--muted:#94a3b8;--faint:#334155;
+  }
+  html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+  /* Layout */
+  #app{display:flex;height:100vh;overflow:hidden}
+  /* Login */
+  #login-screen{display:flex;align-items:center;justify-content:center;height:100vh;width:100%;background:var(--bg)}
+  .login-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:40px 36px;width:360px}
+  .login-card h1{font-size:22px;font-weight:700;margin-bottom:6px}
+  .login-card p{color:var(--muted);font-size:13px;margin-bottom:28px}
+  .login-logo{font-size:32px;margin-bottom:16px;text-align:center}
+  /* Sidebar */
+  #sidebar{width:220px;min-width:220px;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:0}
+  .sidebar-logo{padding:22px 20px 16px;font-size:18px;font-weight:800;color:var(--purple-light);letter-spacing:-0.5px;border-bottom:1px solid var(--border)}
+  .sidebar-logo span{color:var(--muted);font-weight:400;font-size:11px;display:block;margin-top:2px}
+  nav{flex:1;padding:12px 8px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;color:var(--muted);transition:background 0.15s,color 0.15s;font-size:13px;font-weight:500;border:none;background:none;width:100%;text-align:left}
+  .nav-item:hover{background:rgba(124,58,237,0.12);color:var(--text)}
+  .nav-item.active{background:rgba(124,58,237,0.2);color:var(--purple-light)}
+  .nav-item svg{flex-shrink:0}
+  .sidebar-footer{padding:12px 8px;border-top:1px solid var(--border)}
+  /* Main */
+  #main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;border-bottom:1px solid var(--border);background:var(--sidebar);flex-shrink:0}
+  .topbar-title{font-size:15px;font-weight:600}
+  .topbar-user{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(124,58,237,0.2);color:var(--purple-light)}
+  #content{flex:1;overflow-y:auto;padding:24px}
+  /* Cards */
+  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+  @media(max-width:900px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+  .stat-card .label{font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px}
+  .stat-card .value{font-size:26px;font-weight:700}
+  .stat-card .sub{font-size:12px;color:var(--muted);margin-top:4px}
+  /* Section */
+  .section{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;overflow:hidden}
+  .section-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .section-header h2{font-size:15px;font-weight:600}
+  .section-body{padding:0}
+  /* Table */
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;padding:10px 20px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);background:rgba(0,0,0,0.2)}
+  td{padding:12px 20px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(255,255,255,0.02)}
+  /* Status badges */
+  .status{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+  .status-pending{background:rgba(245,158,11,0.15);color:#fbbf24}
+  .status-approved{background:rgba(34,197,94,0.15);color:#4ade80}
+  .status-rejected{background:rgba(239,68,68,0.15);color:#f87171}
+  .status-admin{background:rgba(124,58,237,0.2);color:var(--purple-light)}
+  .status-business{background:rgba(6,182,212,0.15);color:#22d3ee}
+  .status-customer{background:rgba(148,163,184,0.15);color:var(--muted)}
+  /* Buttons */
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:opacity 0.15s}
+  .btn:hover{opacity:0.85}
+  .btn:disabled{opacity:0.4;cursor:not-allowed}
+  .btn-primary{background:var(--purple);color:#fff}
+  .btn-success{background:var(--green);color:#fff}
+  .btn-danger{background:var(--red);color:#fff}
+  .btn-ghost{background:rgba(255,255,255,0.07);color:var(--text)}
+  .btn-sm{padding:5px 10px;font-size:11px}
+  /* Form */
+  .form-group{margin-bottom:16px}
+  .form-group label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
+  .form-input{width:100%;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;color:var(--text);outline:none;transition:border-color 0.15s}
+  .form-input:focus{border-color:var(--purple)}
+  .form-input::placeholder{color:var(--faint)}
+  /* Modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000}
+  .modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:440px;max-width:95vw}
+  .modal h3{font-size:16px;font-weight:700;margin-bottom:16px}
+  .modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+  /* Spinner */
+  .spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* Toast */
+  #toast{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+  .toast{padding:12px 18px;border-radius:10px;font-size:13px;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,0.5);animation:fadeIn 0.25s ease;max-width:320px}
+  .toast-success{background:#064e3b;border:1px solid #059669;color:#6ee7b7}
+  .toast-error{background:#450a0a;border:1px solid #dc2626;color:#fca5a5}
+  .toast-info{background:#1e1b4b;border:1px solid var(--purple);color:var(--purple-light)}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  /* Danger zone */
+  .danger-box{background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);border-radius:12px;padding:20px}
+  /* Rank pill */
+  .rank-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:rgba(124,58,237,0.2);color:var(--purple-light)}
+  .rank-0{background:rgba(148,163,184,0.1);color:var(--muted)}
+  /* Empty state */
+  .empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px}
+  /* Page title */
+  .page-title{font-size:20px;font-weight:700;margin-bottom:20px}
+  /* Hidden */
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">🍸</div>
+    <h1>Tipzy Admin</h1>
+    <p>Sign in with your admin account to continue</p>
+    <div class="form-group">
+      <label>Email</label>
+      <input class="form-input" id="login-email" type="email" placeholder="admin@tipzy.com" autocomplete="username"/>
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input class="form-input" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px" id="login-btn" onclick="doLogin()">Sign In</button>
+    <div id="login-error" style="color:#f87171;font-size:12px;margin-top:10px;text-align:center"></div>
+  </div>
+</div>
+
+<!-- App Shell -->
+<div id="app" class="hidden">
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="sidebar-logo">🍸 Tipzy<span>Admin Dashboard</span></div>
+    <nav>
+      <button class="nav-item active" onclick="showPage('overview')" id="nav-overview">
+        ${icon('grid')} Overview
+      </button>
+      <button class="nav-item" onclick="showPage('requests')" id="nav-requests">
+        ${icon('bell')} Business Requests <span id="req-badge" class="badge hidden" style="margin-left:auto"></span>
+      </button>
+      <button class="nav-item" onclick="showPage('users')" id="nav-users">
+        ${icon('users')} Users
+      </button>
+      <button class="nav-item" onclick="showPage('venues')" id="nav-venues">
+        ${icon('map-pin')} Venues
+      </button>
+      <button class="nav-item" onclick="showPage('danger')" id="nav-danger">
+        ${icon('alert')} Danger Zone
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="nav-item" style="color:var(--red)" onclick="doLogout()">
+        ${icon('logout')} Sign Out
+      </button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div id="main">
+    <div class="topbar">
+      <span class="topbar-title" id="topbar-title">Overview</span>
+      <div class="topbar-user">
+        <span id="topbar-name"></span>
+        <span class="badge">Admin</span>
+        <button class="btn btn-ghost btn-sm" onclick="refreshCurrentPage()">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="content">
+
+      <!-- OVERVIEW PAGE -->
+      <div id="page-overview">
+        <div class="page-title">Dashboard Overview</div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="label">Total Users</div>
+            <div class="value" id="stat-users">—</div>
+            <div class="sub" id="stat-users-sub"></div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Businesses</div>
+            <div class="value" id="stat-biz">—</div>
+            <div class="sub" id="stat-biz-sub" style="color:var(--yellow)"></div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Approved Venues</div>
+            <div class="value" id="stat-venues">—</div>
+            <div class="sub" id="stat-venues-sub"></div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Pending Requests</div>
+            <div class="value" id="stat-pending" style="color:var(--yellow)">—</div>
+            <div class="sub" style="color:var(--yellow)">Needs review</div>
+          </div>
+        </div>
+
+        <!-- Recent Users -->
+        <div class="section">
+          <div class="section-header">
+            <h2>Recent Registrations</h2>
+            <button class="btn btn-ghost btn-sm" onclick="loadOverview()">↻</button>
+          </div>
+          <div class="section-body">
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Business</th><th>Joined</th></tr></thead>
+              <tbody id="recent-users-table"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- REQUESTS PAGE -->
+      <div id="page-requests" class="hidden">
+        <div class="page-title">Business Requests</div>
+        <div class="section">
+          <div class="section-header">
+            <h2>Pending Approvals</h2>
+            <button class="btn btn-ghost btn-sm" onclick="loadRequests()">↻ Refresh</button>
+          </div>
+          <div class="section-body">
+            <table>
+              <thead><tr><th>Business Name</th><th>Owner</th><th>Email</th><th>Registered</th><th>Actions</th></tr></thead>
+              <tbody id="requests-table"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- USERS PAGE -->
+      <div id="page-users" class="hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div class="page-title" style="margin:0">All Users</div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <input class="form-input" id="user-search" style="width:220px" placeholder="Search name or email…" oninput="filterUsers()"/>
+            <button class="btn btn-ghost btn-sm" onclick="loadUsers()">↻</button>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-body">
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Business</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="users-table"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VENUES PAGE -->
+      <div id="page-venues" class="hidden">
+        <div class="page-title">Venue Management</div>
+        <div class="section">
+          <div class="section-header">
+            <h2>All Venues</h2>
+            <button class="btn btn-ghost btn-sm" onclick="loadVenues()">↻</button>
+          </div>
+          <div class="section-body">
+            <table>
+              <thead><tr><th>Name</th><th>Address</th><th>Status</th><th>Featured Rank</th><th>Actions</th></tr></thead>
+              <tbody id="venues-table"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- DANGER PAGE -->
+      <div id="page-danger" class="hidden">
+        <div class="page-title">Danger Zone</div>
+        <div class="danger-box">
+          <div style="font-size:15px;font-weight:700;color:var(--red);margin-bottom:8px">⚠️ Flush All Demo Data</div>
+          <p style="color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:16px">
+            Permanently deletes ALL venues, events, orders, offers, subscriptions, and all non-admin users.<br/>
+            <strong style="color:var(--red)">This cannot be undone.</strong> Admin accounts are preserved.
+          </p>
+          <button class="btn btn-danger" onclick="confirmFlush()">🗑 Flush All Demo Data</button>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- Reject Modal -->
+<div id="reject-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Reject Business Application</h3>
+    <div class="form-group">
+      <label>Reason (optional — sent to the owner)</label>
+      <textarea class="form-input" id="reject-reason" rows="3" placeholder="e.g. Incomplete information provided…" style="resize:vertical"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('reject-modal')">Cancel</button>
+      <button class="btn btn-danger" onclick="submitReject()">Reject & Notify</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rank Modal -->
+<div id="rank-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Set Featured Rank</h3>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px">Rank 0 = not featured. Lower numbers appear first.</p>
+    <div class="form-group">
+      <label>Venue</label>
+      <input class="form-input" id="rank-venue-name" disabled/>
+    </div>
+    <div class="form-group">
+      <label>Featured Rank</label>
+      <input class="form-input" id="rank-value" type="number" min="0" placeholder="0"/>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('rank-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitRank()">Save Rank</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div id="reset-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Reset User Password</h3>
+    <div class="form-group">
+      <label>New Password (min 6 chars)</label>
+      <input class="form-input" id="reset-password" type="password" placeholder="New password"/>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('reset-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitReset()">Reset Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast"></div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const API = '${apiBase}/api';
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let token = localStorage.getItem('tipzy_admin_token') || '';
+let adminName = localStorage.getItem('tipzy_admin_name') || '';
+let activePage = 'overview';
+let allUsers = [];
+let pendingRejectId = null;
+let pendingRankVenueId = null;
+let pendingResetUserId = null;
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+if (token) { showApp(); }
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-error');
+  if (!email || !pw) { err.textContent = 'Enter email and password.'; return; }
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  err.textContent = '';
+  try {
+    const res = await fetch(API + '/admin/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password: pw }),
+    });
+    const data = await res.json();
+    if (!res.ok) { err.textContent = data.error || 'Login failed'; btn.disabled=false; btn.textContent='Sign In'; return; }
+    token = data.token;
+    adminName = data.user?.name || email;
+    localStorage.setItem('tipzy_admin_token', token);
+    localStorage.setItem('tipzy_admin_name', adminName);
+    showApp();
+  } catch(e) { err.textContent = 'Network error. Is the server running?'; btn.disabled=false; btn.textContent='Sign In'; }
+}
+
+document.getElementById('login-password').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+document.getElementById('login-email').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+function showApp() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('topbar-name').textContent = adminName;
+  showPage('overview');
+}
+
+function doLogout() {
+  token = ''; adminName = '';
+  localStorage.removeItem('tipzy_admin_token');
+  localStorage.removeItem('tipzy_admin_name');
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('login-email').value='';
+  document.getElementById('login-password').value='';
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showPage(page) {
+  ['overview','requests','users','venues','danger'].forEach(p => {
+    document.getElementById('page-'+p).classList.add('hidden');
+    document.getElementById('nav-'+p).classList.remove('active');
+  });
+  document.getElementById('page-'+page).classList.remove('hidden');
+  document.getElementById('nav-'+page).classList.add('active');
+  const titles = {overview:'Overview',requests:'Business Requests',users:'All Users',venues:'Venues',danger:'Danger Zone'};
+  document.getElementById('topbar-title').textContent = titles[page] || page;
+  activePage = page;
+  if(page==='overview') loadOverview();
+  else if(page==='requests') loadRequests();
+  else if(page==='users') loadUsers();
+  else if(page==='venues') loadVenues();
+}
+
+function refreshCurrentPage() { showPage(activePage); }
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers:{'Content-Type':'application/json','Authorization':'Bearer '+token} };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  if (res.status === 401) { doLogout(); throw new Error('Session expired'); }
+  return res;
+}
+
+// ── Overview ──────────────────────────────────────────────────────────────────
+async function loadOverview() {
+  try {
+    const [uRes, vRes] = await Promise.all([
+      api('GET','/admin/users'),
+      api('GET','/admin/venues'),
+    ]);
+    const { users } = await uRes.json();
+    const { venues } = await vRes.json();
+    const pending = users.filter(u => u.businessStatus === 'pending');
+    const businesses = users.filter(u => u.role === 'business');
+    const approved = venues.filter(v => v.status === 'approved');
+    document.getElementById('stat-users').textContent = users.length;
+    document.getElementById('stat-users-sub').textContent = users.filter(u=>u.role==='customer').length + ' customers';
+    document.getElementById('stat-biz').textContent = businesses.length;
+    document.getElementById('stat-biz-sub').textContent = pending.length + ' pending';
+    document.getElementById('stat-venues').textContent = approved.length;
+    document.getElementById('stat-venues-sub').textContent = venues.length + ' total';
+    document.getElementById('stat-pending').textContent = pending.length;
+    // Badge
+    const badge = document.getElementById('req-badge');
+    if(pending.length>0){badge.textContent=pending.length;badge.classList.remove('hidden');}
+    else{badge.classList.add('hidden');}
+    // Recent users table
+    const tbody = document.getElementById('recent-users-table');
+    const recent = users.slice(0,15);
+    tbody.innerHTML = recent.length ? recent.map(u => \`
+      <tr>
+        <td>\${esc(u.name)}</td>
+        <td style="color:var(--muted)">\${esc(u.email)}</td>
+        <td><span class="status status-\${u.role}">\${u.role}</span></td>
+        <td>\${u.businessName ? esc(u.businessName) : '<span style="color:var(--faint)">—</span>'}</td>
+        <td style="color:var(--muted)">\${fmt(u.createdAt)}</td>
+      </tr>
+    \`).join('') : '<tr><td colspan="5" class="empty">No users yet</td></tr>';
+  } catch(e) { toast('Failed to load overview: '+e.message,'error'); }
+}
+
+// ── Business Requests ─────────────────────────────────────────────────────────
+async function loadRequests() {
+  const tbody = document.getElementById('requests-table');
+  tbody.innerHTML = '<tr><td colspan="5" class="empty"><div class="spinner"></div></td></tr>';
+  try {
+    const res = await api('GET','/admin/users');
+    const { users } = await res.json();
+    const pending = users.filter(u => u.businessStatus === 'pending');
+    const badge = document.getElementById('req-badge');
+    if(pending.length>0){badge.textContent=pending.length;badge.classList.remove('hidden');}
+    else{badge.classList.add('hidden');}
+    if(!pending.length){tbody.innerHTML='<tr><td colspan="5" class="empty">✅ No pending requests</td></tr>';return;}
+    tbody.innerHTML = pending.map(u => \`
+      <tr>
+        <td style="font-weight:600">\${esc(u.businessName||'—')}</td>
+        <td>\${esc(u.name)}</td>
+        <td style="color:var(--muted)">\${esc(u.email)}</td>
+        <td style="color:var(--muted)">\${fmt(u.createdAt)}</td>
+        <td>
+          <button class="btn btn-success btn-sm" onclick="approveBusiness('\${u.id}')">✓ Approve</button>
+          <button class="btn btn-danger btn-sm" style="margin-left:6px" onclick="openReject('\${u.id}')">✗ Reject</button>
+        </td>
+      </tr>
+    \`).join('');
+  } catch(e) { tbody.innerHTML='<tr><td colspan="5" class="empty" style="color:var(--red)">Error loading requests</td></tr>'; }
+}
+
+async function approveBusiness(id) {
+  if(!confirm('Approve this business? The owner will be notified by email.')) return;
+  try {
+    await api('PATCH','/admin/business/'+id+'/approve');
+    toast('Business approved ✅','success');
+    loadRequests(); loadOverview();
+  } catch(e){toast('Failed: '+e.message,'error');}
+}
+
+function openReject(id) { pendingRejectId=id; document.getElementById('reject-reason').value=''; openModal('reject-modal'); }
+async function submitReject() {
+  if(!pendingRejectId) return;
+  const reason = document.getElementById('reject-reason').value.trim();
+  try {
+    await api('PATCH','/admin/business/'+pendingRejectId+'/reject',{reason:reason||undefined});
+    toast('Business rejected','info');
+    closeModal('reject-modal'); pendingRejectId=null;
+    loadRequests(); loadOverview();
+  } catch(e){toast('Failed: '+e.message,'error');}
+}
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  const tbody = document.getElementById('users-table');
+  tbody.innerHTML = '<tr><td colspan="6" class="empty"><div class="spinner"></div></td></tr>';
+  try {
+    const res = await api('GET','/admin/users');
+    const { users } = await res.json();
+    allUsers = users;
+    renderUsers(allUsers);
+  } catch(e){tbody.innerHTML='<tr><td colspan="6" class="empty" style="color:var(--red)">Error loading users</td></tr>';}
+}
+
+function filterUsers() {
+  const q = document.getElementById('user-search').value.toLowerCase();
+  renderUsers(allUsers.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
+}
+
+function renderUsers(users) {
+  const tbody = document.getElementById('users-table');
+  tbody.innerHTML = users.length ? users.map(u => \`
+    <tr>
+      <td style="font-weight:600">\${esc(u.name)}</td>
+      <td style="color:var(--muted)">\${esc(u.email)}</td>
+      <td><span class="status status-\${u.role}">\${u.role}</span></td>
+      <td>\${u.businessName?esc(u.businessName):'<span style="color:var(--faint)">—</span>'}</td>
+      <td>\${u.businessStatus?'<span class="status status-'+u.businessStatus+'">'+u.businessStatus+'</span>':'<span style="color:var(--faint)">—</span>'}</td>
+      <td style="white-space:nowrap">
+        <select class="form-input" style="width:110px;padding:4px 8px;display:inline-block" onchange="changeRole('\${u.id}',this.value)">
+          <option value="customer" \${u.role==='customer'?'selected':''}>customer</option>
+          <option value="business" \${u.role==='business'?'selected':''}>business</option>
+          <option value="admin" \${u.role==='admin'?'selected':''}>admin</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" style="margin-left:6px" onclick="openReset('\${u.id}')">🔑</button>
+        <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteUser('\${u.id}','\${esc(u.name)}')">🗑</button>
+      </td>
+    </tr>
+  \`).join('') : '<tr><td colspan="6" class="empty">No users found</td></tr>';
+}
+
+async function changeRole(id, role) {
+  try {
+    await api('PATCH','/admin/users/'+id+'/role',{role});
+    toast('Role updated to '+role,'success');
+  } catch(e){toast('Failed: '+e.message,'error'); loadUsers();}
+}
+
+async function deleteUser(id, name) {
+  if(!confirm('Delete user "'+name+'"? This cannot be undone.')) return;
+  try {
+    await api('DELETE','/admin/users/'+id);
+    toast('User deleted','info');
+    loadUsers(); loadOverview();
+  } catch(e){toast('Failed: '+e.message,'error');}
+}
+
+function openReset(id) { pendingResetUserId=id; document.getElementById('reset-password').value=''; openModal('reset-modal'); }
+async function submitReset() {
+  const pw = document.getElementById('reset-password').value;
+  if(!pw||pw.length<6){toast('Password must be at least 6 characters','error');return;}
+  try {
+    await api('PATCH','/admin/users/'+pendingResetUserId+'/reset-password',{newPassword:pw});
+    toast('Password reset','success');
+    closeModal('reset-modal'); pendingResetUserId=null;
+  } catch(e){toast('Failed: '+e.message,'error');}
+}
+
+// ── Venues ────────────────────────────────────────────────────────────────────
+async function loadVenues() {
+  const tbody = document.getElementById('venues-table');
+  tbody.innerHTML = '<tr><td colspan="5" class="empty"><div class="spinner"></div></td></tr>';
+  try {
+    const res = await api('GET','/admin/venues');
+    const { venues } = await res.json();
+    tbody.innerHTML = venues.length ? venues.map(v => \`
+      <tr>
+        <td style="font-weight:600">\${esc(v.name)}</td>
+        <td style="color:var(--muted);font-size:12px">\${esc(v.address||'—')}</td>
+        <td><span class="status status-\${v.status}">\${v.status}</span></td>
+        <td><span class="rank-pill \${v.featured_rank===0?'rank-0':''}">\${v.featured_rank===0?'Not featured':'#'+v.featured_rank}</span></td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="openRank('\${v.id}',\${JSON.stringify(esc(v.name))},\${v.featured_rank})">✏️ Set Rank</button>
+        </td>
+      </tr>
+    \`).join('') : '<tr><td colspan="5" class="empty">No venues found</td></tr>';
+  } catch(e){tbody.innerHTML='<tr><td colspan="5" class="empty" style="color:var(--red)">Error loading venues</td></tr>';}
+}
+
+function openRank(id, name, rank) {
+  pendingRankVenueId = id;
+  document.getElementById('rank-venue-name').value = name;
+  document.getElementById('rank-value').value = rank;
+  openModal('rank-modal');
+}
+
+async function submitRank() {
+  const rankVal = parseInt(document.getElementById('rank-value').value,10);
+  if(isNaN(rankVal)||rankVal<0){toast('Enter a number ≥ 0','error');return;}
+  try {
+    await api('PATCH','/admin/venues/'+pendingRankVenueId+'/featured-rank',{featuredRank:rankVal});
+    toast('Featured rank updated ✅','success');
+    closeModal('rank-modal'); pendingRankVenueId=null;
+    loadVenues();
+  } catch(e){toast('Failed: '+e.message,'error');}
+}
+
+// ── Danger ────────────────────────────────────────────────────────────────────
+function confirmFlush() {
+  if(!confirm('⚠️ This will PERMANENTLY delete all venues, events, orders, offers, subscriptions, and all non-admin users. Are you absolutely sure?')) return;
+  if(prompt('Type FLUSH to confirm:') !== 'FLUSH') { toast('Cancelled','info'); return; }
+  api('POST','/admin/flush-demo-data',{confirm:'FLUSH'})
+    .then(r=>r.json())
+    .then(d=>{ toast(d.message||'Done','success'); loadOverview(); })
+    .catch(e=>toast('Failed: '+e.message,'error'));
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function esc(s){ const d=document.createElement('div');d.textContent=String(s??'');return d.innerHTML; }
+function fmt(d){ return d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'; }
+function openModal(id){ document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = 'toast toast-'+type;
+  el.textContent = msg;
+  document.getElementById('toast').appendChild(el);
+  setTimeout(()=>el.remove(), 3500);
+}
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el=>{
+  el.addEventListener('click', e=>{ if(e.target===el) el.classList.add('hidden'); });
+});
+</script>
+</body>
+</html>`;
+}
+
+function icon(name: string): string {
+  const icons: Record<string, string> = {
+    grid: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
+    bell: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+    users: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    'map-pin': '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+    alert: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    logout: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+  };
+  return icons[name] ?? '';
+}
+
