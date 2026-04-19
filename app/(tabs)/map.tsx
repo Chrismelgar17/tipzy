@@ -258,7 +258,7 @@ export default function MapScreen() {
                     </View>
                     <View style={styles.statItem}>
                       <MapPin size={16} color={theme.colors.text.secondary} />
-                      <Text style={styles.statText}>{selectedVenue.distance} mi away</Text>
+                      <Text style={styles.statText}>{selectedVenue.distance != null ? selectedVenue.distance.toFixed(1) : '—'} mi away</Text>
                     </View>
                   </View>
                   

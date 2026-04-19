@@ -14,6 +14,17 @@ import { useTheme } from '@/hooks/theme-context';
 import { useAuth } from '@/hooks/auth-context';
 import { ArrowLeft, Clock } from 'lucide-react-native';
 import { WorkHours, DayHours } from '@/types/models';
+import TimeScrollPicker from '@/components/TimeScrollPicker';
+
+/** Format a 24-h 'HH:MM' string as '12:00 PM' for display */
+function format12h(time: string): string {
+  const [hStr, mStr] = (time ?? '00:00').split(':');
+  const h24 = parseInt(hStr, 10) || 0;
+  const m = parseInt(mStr, 10) || 0;
+  const period = h24 < 12 ? 'AM' : 'PM';
+  const h12 = h24 % 12 || 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
 
 const DAYS = [
   { key: 'monday', label: 'Monday' },
@@ -25,11 +36,6 @@ const DAYS = [
   { key: 'sunday', label: 'Sunday' },
 ] as const;
 
-const TIME_SLOTS = [
-  '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00',
-  '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00',
-  '01:00', '02:00', '03:00', '04:00', '05:00', '06:00'
-];
 
 export default function BusinessHoursScreen() {
   const { theme } = useTheme();
@@ -67,15 +73,13 @@ export default function BusinessHoursScreen() {
 
   const handleTimeSelect = (time: string) => {
     if (!showTimePicker.day || !showTimePicker.type) return;
-    
     setWorkHours(prev => ({
       ...prev,
       [showTimePicker.day!]: {
         ...prev[showTimePicker.day!],
-        [showTimePicker.type === 'open' ? 'openTime' : 'closeTime']: time
-      }
+        [showTimePicker.type === 'open' ? 'openTime' : 'closeTime']: time,
+      },
     }));
-    
     setShowTimePicker({ day: null, type: null });
   };
 
@@ -186,60 +190,7 @@ export default function BusinessHoursScreen() {
       fontWeight: '600' as const,
       color: theme.colors.white,
     },
-    modalOverlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: theme.colors.overlay,
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 1000,
-    },
-    modalContent: {
-      backgroundColor: theme.colors.card,
-      borderRadius: 16,
-      padding: 20,
-      width: '90%',
-      maxHeight: '70%',
-    },
-    modalTitle: {
-      fontSize: 20,
-      fontWeight: '600' as const,
-      color: theme.colors.text.primary,
-      marginBottom: 16,
-      textAlign: 'center',
-    },
-    timeGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-    },
-    timeOption: {
-      backgroundColor: theme.colors.background,
-      borderRadius: 8,
-      padding: 12,
-      minWidth: 70,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    timeOptionText: {
-      fontSize: 16,
-      color: theme.colors.text.primary,
-    },
-    modalCloseButton: {
-      backgroundColor: theme.colors.purple,
-      borderRadius: 8,
-      padding: 12,
-      alignItems: 'center',
-      marginTop: 16,
-    },
-    modalCloseButtonText: {
-      color: theme.colors.white,
-      fontWeight: '600' as const,
-    },
+
   });
 
   return (
@@ -286,19 +237,19 @@ export default function BusinessHoursScreen() {
                     testID={`${key}-open-time`}
                   >
                     <Text style={styles.timeButtonText}>
-                      {workHours[key].openTime}
+                      {format12h(workHours[key].openTime)}
                     </Text>
                   </TouchableOpacity>
-                  
+
                   <Text style={styles.timeSeparator}>to</Text>
-                  
+
                   <TouchableOpacity
                     style={styles.timeButton}
                     onPress={() => setShowTimePicker({ day: key, type: 'close' })}
                     testID={`${key}-close-time`}
                   >
                     <Text style={styles.timeButtonText}>
-                      {workHours[key].closeTime}
+                      {format12h(workHours[key].closeTime)}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -318,36 +269,19 @@ export default function BusinessHoursScreen() {
         </View>
       </ScrollView>
 
-      {showTimePicker.day && showTimePicker.type && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              Select {showTimePicker.type === 'open' ? 'Opening' : 'Closing'} Time
-            </Text>
-            <ScrollView>
-              <View style={styles.timeGrid}>
-                {TIME_SLOTS.map((time) => (
-                  <TouchableOpacity
-                    key={time}
-                    style={styles.timeOption}
-                    onPress={() => handleTimeSelect(time)}
-                    testID={`time-option-${time}`}
-                  >
-                    <Text style={styles.timeOptionText}>{time}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setShowTimePicker({ day: null, type: null })}
-              testID="close-time-picker"
-            >
-              <Text style={styles.modalCloseButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+      <TimeScrollPicker
+        visible={!!(showTimePicker.day && showTimePicker.type)}
+        onClose={() => setShowTimePicker({ day: null, type: null })}
+        onTimeSelect={handleTimeSelect}
+        initialTime={
+          showTimePicker.day
+            ? showTimePicker.type === 'open'
+              ? workHours[showTimePicker.day].openTime
+              : workHours[showTimePicker.day].closeTime
+            : '12:00'
+        }
+        title={`Select ${showTimePicker.type === 'open' ? 'Opening' : 'Closing'} Time`}
+      />
     </SafeAreaView>
   );
 }

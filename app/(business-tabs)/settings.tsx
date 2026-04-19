@@ -104,9 +104,9 @@ export default function BusinessSettingsScreen() {
     router.push('/business-profile');
   };
 
-  const handleAddVenue = () => {
-    router.push('/add-venue' as any);
-  };
+  // const handleAddVenue = () => {
+  //   router.push('/add-venue' as any);
+  // };
 
   const handleSubscription = () => {
     router.push('/(business-tabs)/subscription' as any);
@@ -134,15 +134,15 @@ export default function BusinessSettingsScreen() {
           onPress: handleSubscription,
           testId: 'subscription-button',
         },
-        {
-          id: 'add-venue',
-          title: 'Add New Venue',
-          description: 'Register an additional bar or club under your account',
-          icon: <Building2 size={24} color={theme.colors.purple} />,
-          type: 'link' as const,
-          onPress: handleAddVenue,
-          testId: 'add-venue-button',
-        },
+        // {
+        //   id: 'add-venue',
+        //   title: 'Add New Venue',
+        //   description: 'Register an additional bar or club under your account',
+        //   icon: <Building2 size={24} color={theme.colors.purple} />,
+        //   type: 'link' as const,
+        //   onPress: handleAddVenue,
+        //   testId: 'add-venue-button',
+        // },
       ],
     },
     {

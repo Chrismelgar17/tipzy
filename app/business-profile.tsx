@@ -27,8 +27,19 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeJsonParse, clearCorruptedData } from '@/utils/storage';
 import LocationPickerMap, { PickedLocation } from '@/components/LocationPickerMap';
+import TimeScrollPicker from '@/components/TimeScrollPicker';
 import api from '@/lib/api';
 import { uploadImageToCloud, isLocalUri } from '@/lib/upload';
+
+/** Format a 24-h 'HH:MM' string as '12:00 PM' for display */
+function format12h(time: string): string {
+  const [hStr, mStr] = (time ?? '00:00').split(':');
+  const h24 = parseInt(hStr, 10) || 0;
+  const m = parseInt(mStr, 10) || 0;
+  const period = h24 < 12 ? 'AM' : 'PM';
+  const h12 = h24 % 12 || 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
 
 interface FormData {
   businessName: string;
@@ -70,6 +81,10 @@ export default function BusinessProfileScreen() {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [venueId, setVenueId] = useState<string | null>(null);
+  const [timePicker, setTimePicker] = useState<{
+    day: keyof WorkHours | null;
+    type: 'open' | 'close' | null;
+  }>({ day: null, type: null });
 
   const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(null);
   const [formData, setFormData] = useState<FormData>({
@@ -802,21 +817,23 @@ export default function BusinessProfileScreen() {
 
                   {formData.workHours[key].isOpen ? (
                     <View style={styles.timeContainer}>
-                      <TextInput
+                      <TouchableOpacity
                         style={styles.timeInput}
-                        value={formData.workHours[key].openTime}
-                        onChangeText={(text) => handleWorkHoursChange(key, 'openTime', text)}
-                        placeholder="09:00"
-                        placeholderTextColor={theme.colors.text.tertiary}
-                      />
+                        onPress={() => setTimePicker({ day: key, type: 'open' })}
+                      >
+                        <Text style={{ fontSize: 14, color: theme.colors.text.primary, textAlign: 'center' }}>
+                          {format12h(formData.workHours[key].openTime)}
+                        </Text>
+                      </TouchableOpacity>
                       <Text style={styles.timeSeparator}>to</Text>
-                      <TextInput
+                      <TouchableOpacity
                         style={styles.timeInput}
-                        value={formData.workHours[key].closeTime}
-                        onChangeText={(text) => handleWorkHoursChange(key, 'closeTime', text)}
-                        placeholder="22:00"
-                        placeholderTextColor={theme.colors.text.tertiary}
-                      />
+                        onPress={() => setTimePicker({ day: key, type: 'close' })}
+                      >
+                        <Text style={{ fontSize: 14, color: theme.colors.text.primary, textAlign: 'center' }}>
+                          {format12h(formData.workHours[key].closeTime)}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   ) : (
                     <View style={styles.timeContainer}>
@@ -847,6 +864,29 @@ export default function BusinessProfileScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <TimeScrollPicker
+        visible={!!(timePicker.day && timePicker.type)}
+        onClose={() => setTimePicker({ day: null, type: null })}
+        onTimeSelect={(time) => {
+          if (timePicker.day && timePicker.type) {
+            handleWorkHoursChange(
+              timePicker.day,
+              timePicker.type === 'open' ? 'openTime' : 'closeTime',
+              time,
+            );
+          }
+          setTimePicker({ day: null, type: null });
+        }}
+        initialTime={
+          timePicker.day
+            ? timePicker.type === 'open'
+              ? formData.workHours[timePicker.day].openTime
+              : formData.workHours[timePicker.day].closeTime
+            : '12:00'
+        }
+        title={`Select ${timePicker.type === 'open' ? 'Opening' : 'Closing'} Time`}
+      />
     </View>
   );
 }
