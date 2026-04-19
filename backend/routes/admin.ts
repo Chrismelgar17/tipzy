@@ -633,6 +633,32 @@ function getAdminDashboardHTML(apiBase: string): string {
           </div>
         </div>
 
+        <!-- Sign-up counters -->
+        <div class="stats-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:16px">
+          <div class="stat-card">
+            <div class="label">New Sign-ups Today</div>
+            <div class="value" id="stat-today" style="color:var(--cyan)">—</div>
+            <div class="sub" id="stat-today-sub" style="color:var(--muted)"></div>
+          </div>
+          <div class="stat-card">
+            <div class="label">New Sign-ups This Week</div>
+            <div class="value" id="stat-week" style="color:var(--purple-light)">—</div>
+            <div class="sub" id="stat-week-sub" style="color:var(--muted)"></div>
+          </div>
+        </div>
+
+        <!-- Sign-up Trend Chart -->
+        <div class="section" style="margin-bottom:20px">
+          <div class="section-header">
+            <h2>Sign-up Trend — Last 14 Days</h2>
+            <span id="signup-chart-total" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+          <div style="padding:20px 20px 12px">
+            <div id="signup-chart" style="display:flex;align-items:flex-end;gap:5px;height:80px"></div>
+            <div id="signup-chart-labels" style="display:flex;gap:5px;margin-top:8px"></div>
+          </div>
+        </div>
+
         <!-- Recent Users -->
         <div class="section">
           <div class="section-header">
@@ -878,6 +904,43 @@ async function loadOverview() {
     document.getElementById('stat-venues').textContent = approved.length;
     document.getElementById('stat-venues-sub').textContent = venues.length + ' total';
     document.getElementById('stat-pending').textContent = pending.length;
+    // Sign-up counters
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0,10);
+    const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
+    const monthAgo = new Date(now); monthAgo.setDate(monthAgo.getDate() - 30);
+    const newToday = users.filter(u => u.createdAt && u.createdAt.slice(0,10) === todayStr).length;
+    const newWeek = users.filter(u => u.createdAt && new Date(u.createdAt) >= weekAgo).length;
+    const newMonth = users.filter(u => u.createdAt && new Date(u.createdAt) >= monthAgo).length;
+    document.getElementById('stat-today').textContent = newToday;
+    document.getElementById('stat-today-sub').textContent = newMonth + ' this month';
+    document.getElementById('stat-week').textContent = newWeek;
+    document.getElementById('stat-week-sub').textContent = newMonth + ' this month';
+    // 14-day bar chart
+    const days = 14;
+    const dailyCounts = [];
+    const dayLabels = [];
+    for(let i = days-1; i >= 0; i--) {
+      const d = new Date(now); d.setDate(d.getDate() - i);
+      const ds = d.toISOString().slice(0,10);
+      const count = users.filter(u => u.createdAt && u.createdAt.slice(0,10) === ds).length;
+      dailyCounts.push(count);
+      dayLabels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+    }
+    const maxCount = Math.max(...dailyCounts, 1);
+    const totalTrend = dailyCounts.reduce((a,b)=>a+b,0);
+    document.getElementById('signup-chart-total').textContent = totalTrend + ' sign-ups in 14 days';
+    const chartEl = document.getElementById('signup-chart');
+    const labelsEl = document.getElementById('signup-chart-labels');
+    chartEl.innerHTML = dailyCounts.map((c,i) => {
+      const pct = Math.max((c/maxCount)*100, c>0?4:1);
+      const isToday = i === days-1;
+      return '<div title="'+dayLabels[i]+': '+c+' sign-up'+(c===1?'':'s')+'" style="flex:1;background:'+(isToday?'var(--cyan)':'var(--purple)');opacity:'+(isToday?'1':'0.7')+';height:'+pct+'%;border-radius:4px 4px 0 0;min-height:'+(c>0?'4':'1')+'px;cursor:default"></div>';
+    }).join('');
+    labelsEl.innerHTML = dayLabels.map((l,i)=>{
+      const isToday = i===days-1;
+      return '<div style="flex:1;font-size:9px;color:'+(isToday?'var(--cyan)':'var(--muted)')+';text-align:center;white-space:nowrap;overflow:hidden">'+l+'</div>';
+    }).join('');
     // Badge
     const badge = document.getElementById('req-badge');
     if(pending.length>0){badge.textContent=pending.length;badge.classList.remove('hidden');}
