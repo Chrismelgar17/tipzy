@@ -38,7 +38,7 @@ interface ApiOffer {
   isSponsored?: boolean;
 }
 
-type SortOption = 'busiest' | 'nearby' | 'top-rated' | 'open-now';
+type SortOption = 'busiest' | 'nearby' | 'featured' | 'open-now';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -93,7 +93,7 @@ export default function HomeScreen() {
   const sortOptions: { key: SortOption; label: string; icon: any }[] = [
     { key: 'busiest', label: 'Busiest', icon: Users },
     { key: 'nearby', label: 'Nearby', icon: MapPin },
-    { key: 'top-rated', label: 'Top Rated', icon: Star },
+    { key: 'featured', label: 'Featured on Tipzy', icon: Star },
     { key: 'open-now', label: 'Open Now', icon: Clock },
   ];
 
@@ -153,8 +153,11 @@ export default function HomeScreen() {
         return sorted.sort((a, b) => (b.currentCount || 0) - (a.currentCount || 0));
       case 'nearby':
         return sorted.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-      case 'top-rated':
-        return sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      case 'featured':
+        return sorted
+          .filter(venue => venue.featuredRank && venue.featuredRank > 0)
+          .sort((a, b) => (a.featuredRank || 0) - (b.featuredRank || 0))
+          .concat(sorted.filter(venue => !venue.featuredRank || venue.featuredRank === 0));
       case 'open-now':
         return sorted.filter(venue => isVenueOpenNow(venue)).sort((a, b) => (a.distance || 0) - (b.distance || 0));
       default:
@@ -326,7 +329,7 @@ export default function HomeScreen() {
                   ? 'No results found'
                   : `${getSortedVenues().length} result${getSortedVenues().length === 1 ? '' : 's'} for "${searchQuery}"`
                 : selectedSort === 'busiest' ? 'Busiest Right Now'
-                : selectedSort === 'top-rated' ? 'Top Rated'
+                : selectedSort === 'featured' ? 'Featured on Tipzy'
                 : selectedSort === 'open-now' ? 'Open Now'
                 : 'All Venues'}
             </Text>
