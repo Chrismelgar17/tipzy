@@ -15,7 +15,11 @@ export default function Index() {
     );
   }
 
-  if (isAuthenticated && (isBusiness || isAdmin)) {
+  if (!isAuthenticated) {
+    return <Redirect href="/(auth)/signin" />;
+  }
+
+  if (isBusiness || isAdmin) {
     return <Redirect href="/(business-tabs)/dashboard" />;
   }
 

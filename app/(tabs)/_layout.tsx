@@ -1,12 +1,25 @@
-import { Tabs } from "expo-router";
+import { Tabs, Redirect } from "expo-router";
 import { Home, Map, User, Ticket } from "lucide-react-native";
 import React from "react";
+import { View, ActivityIndicator } from "react-native";
 import { theme } from "@/constants/theme";
 import { useAuth } from "@/hooks/auth-context";
 import { SignInModal } from "@/components/SignInModal";
 
 export default function TabLayout() {
-  const { showSignInModal, setShowSignInModal, signInPrompt } = useAuth();
+  const { showSignInModal, setShowSignInModal, signInPrompt, isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
+        <ActivityIndicator size="large" color={theme.colors.purple} />
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect href="/(auth)/signin" />;
+  }
 
   return (
     <>
