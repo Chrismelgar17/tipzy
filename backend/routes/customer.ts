@@ -158,75 +158,81 @@ customer.post("/provider-auth", async (c) => {
 
   if (!providerSubject) return c.json({ error: "provider subject is required" }, 400);
 
-  const syntheticEmail = provider === "phone"
-    ? `phone_${(normalizedPhone ?? "").replace(/\D/g, "")}@phone.tipzy.local`
-    : undefined;
-  const identityEmail = normalizedEmail ?? syntheticEmail ?? "";
-  const displayName = body.name?.trim()
-    || (provider === "phone" ? `Phone User ${(normalizedPhone ?? "").slice(-4)}` : identityEmail.split("@")[0] || "Customer");
+  try {
+    const syntheticEmail = provider === "phone"
+      ? `phone_${(normalizedPhone ?? "").replace(/\D/g, "")}@phone.tipzy.local`
+      : undefined;
+    const identityEmail = normalizedEmail ?? syntheticEmail ?? "";
+    const displayName = body.name?.trim()
+      || (provider === "phone" ? `Phone User ${(normalizedPhone ?? "").slice(-4)}` : identityEmail.split("@")[0] || "Customer");
 
-  let user: DbUser | undefined;
+    let user: DbUser | undefined;
 
-  // 1) Primary match: provider pair
-  const providerMatch = await query<DbUser>(
-    "SELECT * FROM users WHERE auth_provider = $1 AND provider_subject = $2 LIMIT 1",
-    [provider, providerSubject],
-  );
-  user = providerMatch.rows[0];
-
-  // 2) Fallback match by email (lets existing email/password users link providers)
-  if (!user && identityEmail) {
-    const emailMatch = await query<DbUser>("SELECT * FROM users WHERE email = $1 LIMIT 1", [identityEmail]);
-    user = emailMatch.rows[0];
-  }
-
-  if (user) {
-    if (user.role !== "customer") return c.json({ error: "Not a customer account" }, 403);
-    const updated = await query<DbUser>(
-      `UPDATE users
-       SET email_verified = true,
-           auth_provider = COALESCE(auth_provider, $1),
-           provider_subject = COALESCE(provider_subject, $2),
-           phone = COALESCE(phone, $3)
-       WHERE id = $4
-       RETURNING id, email, name, age, phone, role, created_at, email_verified`,
-      [provider, providerSubject, normalizedPhone, user.id],
+    // 1) Primary match: provider pair
+    const providerMatch = await query<DbUser>(
+      "SELECT * FROM users WHERE auth_provider = $1 AND provider_subject = $2 LIMIT 1",
+      [provider, providerSubject],
     );
-    user = updated.rows[0];
-  } else {
-    if (!identityEmail) {
-      return c.json({ error: "Provider did not return an email for first-time sign in" }, 400);
+    user = providerMatch.rows[0];
+
+    // 2) Fallback match by email (lets existing email/password users link providers)
+    if (!user && identityEmail) {
+      const emailMatch = await query<DbUser>("SELECT * FROM users WHERE email = $1 LIMIT 1", [identityEmail]);
+      user = emailMatch.rows[0];
     }
-    const id = crypto.randomUUID?.() ?? `cust_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const passwordHash = await hashPassword(crypto.randomUUID?.() ?? `${Date.now()}_${Math.random()}`);
-    const insert = await query<DbUser>(
-      `INSERT INTO users (id, email, name, password_hash, role, phone, created_at, email_verified, auth_provider, provider_subject)
-       VALUES ($1, $2, $3, $4, 'customer', $5, now(), true, $6, $7)
-       RETURNING id, email, name, age, phone, role, created_at, email_verified`,
-      [id, identityEmail, displayName, passwordHash, normalizedPhone, provider, providerSubject],
-    );
-    user = insert.rows[0];
+
+    if (user) {
+      if (user.role !== "customer") return c.json({ error: "Not a customer account" }, 403);
+      const updated = await query<DbUser>(
+        `UPDATE users
+         SET email_verified = true,
+             auth_provider = COALESCE(auth_provider, $1),
+             provider_subject = COALESCE(provider_subject, $2),
+             phone = COALESCE(phone, $3)
+         WHERE id = $4
+         RETURNING id, email, name, age, phone, role, created_at, email_verified`,
+        [provider, providerSubject, normalizedPhone, user.id],
+      );
+      user = updated.rows[0];
+    } else {
+      if (!identityEmail) {
+        return c.json({ error: "Apple Sign In requires you to share your email address. Please sign out of this app in Settings → Apple ID → Password & Security → Apps Using Apple ID, then try again." }, 400);
+      }
+      const id = crypto.randomUUID?.() ?? `cust_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const passwordHash = await hashPassword(crypto.randomUUID?.() ?? `${Date.now()}_${Math.random()}`);
+      const insert = await query<DbUser>(
+        `INSERT INTO users (id, email, name, password_hash, role, phone, created_at, email_verified, auth_provider, provider_subject)
+         VALUES ($1, $2, $3, $4, 'customer', $5, now(), true, $6, $7)
+         RETURNING id, email, name, age, phone, role, created_at, email_verified`,
+        [id, identityEmail, displayName, passwordHash, normalizedPhone, provider, providerSubject],
+      );
+      user = insert.rows[0];
+      if (!user) return c.json({ error: "Failed to create account — please try again" }, 500);
+    }
+
+    const accessToken = await signAccessToken(user.id, user.email, "customer");
+    const refreshToken = await signRefreshToken(user.id, "customer");
+    await query("INSERT INTO refresh_tokens (token, user_id) VALUES ($1, $2)", [refreshToken, user.id]);
+
+    return c.json({
+      message: "Provider authentication successful",
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        age: user.age,
+        phone: user.phone,
+        role: "customer",
+        createdAt: user.created_at,
+        emailVerified: true,
+      },
+      token: accessToken,
+      refreshToken,
+    });
+  } catch (err: any) {
+    console.error(`[provider-auth/${provider}] Unhandled error:`, err?.message ?? err);
+    return c.json({ error: err?.message ?? "Sign in failed — please try again" }, 500);
   }
-
-  const accessToken = await signAccessToken(user.id, user.email, "customer");
-  const refreshToken = await signRefreshToken(user.id, "customer");
-  await query("INSERT INTO refresh_tokens (token, user_id) VALUES ($1, $2)", [refreshToken, user.id]);
-
-  return c.json({
-    message: "Provider authentication successful",
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      age: user.age,
-      phone: user.phone,
-      role: "customer",
-      createdAt: user.created_at,
-      emailVerified: true,
-    },
-    token: accessToken,
-    refreshToken,
-  });
 });
 
 // Login
