@@ -81,7 +81,7 @@ export const authService = {
     } catch (e) { throw handleAuthError(e as ApiError); }
   },
 
-  /** Try customer login; if the account is a business/admin, fall back to business login. */
+  /** Try customer → business → admin login in order, returning the first success. */
   loginAny: async (email: string, password: string): Promise<AuthResponse> => {
     try {
       const { data } = await api.post<AuthResponse>("/customer/login", { email, password });
@@ -99,7 +99,20 @@ export const authService = {
           if (!data.token || !data.user) throw new Error("Unexpected response from server");
           await saveSession(data.token, data.refreshToken, data.user);
           return data;
-        } catch (bizErr) { throw handleAuthError(bizErr as ApiError); }
+        } catch (bizErr) {
+          const bizStatus = (bizErr as ApiError)?.response?.status;
+          const bizMsg = ((bizErr as ApiError)?.response?.data as any)?.error ?? '';
+          // 403 "Not a business account" => try admin login
+          if (bizStatus === 403 && bizMsg.toLowerCase().includes('business')) {
+            try {
+              const { data } = await api.post<AuthResponse>("/admin/login", { email, password });
+              if (!data.token || !data.user) throw new Error("Unexpected response from server");
+              await saveSession(data.token, data.refreshToken, data.user);
+              return data;
+            } catch (adminErr) { throw handleAuthError(adminErr as ApiError); }
+          }
+          throw handleAuthError(bizErr as ApiError);
+        }
       }
       throw handleAuthError(err);
     }
@@ -255,6 +268,7 @@ export const authService = {
     // Determine role from stored user to hit the right endpoint
     const stored = await secureStorage.getUserData<AuthUser>();
     const role = stored?.role ?? "customer";
+    // admin tokens can be refreshed via the customer endpoint (no role check server-side)
     const endpoint = role === "business" ? "/business/refresh" : "/customer/refresh";
 
     try {

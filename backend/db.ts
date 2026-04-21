@@ -392,6 +392,9 @@ const initPromise = (async () => {
   await pool.query(`ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_plan_check
     CHECK (plan IN ('customer_monthly','customer_pro','business_monthly','business_pro'));`);
 
+  // Ensure all admin accounts have email_verified = true (admins bypass email verification)
+  await pool.query("UPDATE users SET email_verified = true WHERE role = 'admin' AND (email_verified IS NULL OR email_verified = false);");
+
   await ensureAdminSeed();
   await ensureTestCustomerSeed();
 })().catch((err) => {
@@ -418,8 +421,8 @@ async function ensureAdminSeed() {
   const id = crypto.randomUUID?.() ?? `admin_${Date.now()}`;
   const password_hash = await hashPassword(adminPassword);
   await pool.query(
-    `INSERT INTO users (id, email, name, password_hash, role, created_at)
-     VALUES ($1, $2, $3, $4, 'admin', now())
+    `INSERT INTO users (id, email, name, password_hash, role, email_verified, created_at)
+     VALUES ($1, $2, $3, $4, 'admin', true, now())
      ON CONFLICT (email) DO NOTHING`,
     [id, adminEmail, "Tipzy Admin", password_hash],
   );

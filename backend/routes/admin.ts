@@ -236,7 +236,19 @@ admin.post("/login", async (c) => {
   const accessToken = await signAccessToken(user.id, user.email, "admin");
   const refreshToken = await signRefreshToken(user.id, "admin");
   await query("INSERT INTO refresh_tokens (token, user_id) VALUES ($1, $2)", [refreshToken, user.id]);
-  return c.json({ token: accessToken, refreshToken, user: { id: user.id, email: user.email, name: user.name, role: "admin" } });
+  return c.json({
+    message: "Admin login successful",
+    token: accessToken,
+    refreshToken,
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: "admin" as const,
+      createdAt: user.created_at,
+      emailVerified: true, // Admins bypass email verification
+    },
+  });
 });
 
 // ── GET /api/admin/dashboard – Standalone web admin panel (public, auth client-side) ─
