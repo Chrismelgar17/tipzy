@@ -344,9 +344,7 @@ export default function AuthScreen() {
             </View>
             {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
-            {!usePhone && (
-              <>
-                <View style={[styles.inputContainer, errors.password ? styles.inputError : null]}>
+            <View style={[styles.inputContainer, errors.password ? styles.inputError : null]}>
                   <Lock size={20} color={theme.colors.text.tertiary} />
                   <TextInput
                     style={styles.input}
@@ -364,17 +362,13 @@ export default function AuthScreen() {
                   />
                 </View>
                 {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
-              </>
-            )}
 
-            {!usePhone && (
-              <TouchableOpacity
+            <TouchableOpacity
                 style={styles.forgotPassword}
                 onPress={() => router.push('/forgot-password' as any)}
               >
                 <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
               </TouchableOpacity>
-            )}
 
             <TouchableOpacity
               style={styles.signInButton}

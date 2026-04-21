@@ -49,55 +49,65 @@ customer.post("/register", async (c) => {
   let body: { name?: string; email?: string; password?: string; age?: number; phone?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON body" }, 400); }
 
-  const { name, email, password, age, phone } = body;
-  if (!name || !email || !password) return c.json({ error: "name, email and password are required" }, 400);
-  if (password.length < 6) return c.json({ error: "Password must be at least 6 characters" }, 400);
-
-  const normalised = email.trim().toLowerCase();
-  const exists = await query<DbUser>("SELECT id FROM users WHERE email = $1", [normalised]);
-  if (exists.rowCount && exists.rows.length > 0) {
-    return c.json({ error: "Email already exists" }, 409);
-  }
-
-  const id = crypto.randomUUID?.() ?? `cust_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  const passwordHash = await hashPassword(password);
-
-  const insert = await query<DbUser>(
-    `INSERT INTO users (id, email, name, password_hash, role, age, phone, created_at)
-     VALUES ($1, $2, $3, $4, 'customer', $5, $6, now())
-     RETURNING id, email, name, age, role, created_at, email_verified`,
-    [id, normalised, name.trim(), passwordHash, age ?? null, phone ?? null],
-  );
-  const user = insert.rows[0];
-
-  const accessToken = await signAccessToken(user.id, user.email, "customer");
-  const refreshToken = await signRefreshToken(user.id, "customer");
-  await query("INSERT INTO refresh_tokens (token, user_id) VALUES ($1, $2)", [refreshToken, user.id]);
-
-  // Create email verification token valid for 24h
-  const verificationToken = generateVerificationToken();
-  await query(
-    "INSERT INTO email_verifications (token, user_id, expires_at) VALUES ($1, $2, now() + interval '24 hours')",
-    [verificationToken, user.id],
-  );
-
-  let mailPreviewUrl: string | undefined;
   try {
-    const mail = await sendVerificationEmail(user.email, verificationToken);
-    mailPreviewUrl = mail.previewUrl;
-  } catch (err: any) {
-    console.error("[register] Failed to send verification email:", err?.message ?? err);
-    // Don't block registration if email fails — user can request resend
-  }
+    const { name, email, password, age, phone } = body;
+    if (!name || !email || !password) return c.json({ error: "name, email and password are required" }, 400);
+    if (password.length < 6) return c.json({ error: "Password must be at least 6 characters" }, 400);
 
-  return c.json({
-    message: "Customer registered successfully",
-    user: { id: user.id, email: user.email, name: user.name, age: user.age, role: "customer", createdAt: user.created_at, emailVerified: user.email_verified ?? false },
-    token: accessToken,
-    refreshToken,
-    verificationToken,
-    mailPreviewUrl,
-  }, 201);
+    const normalised = email.trim().toLowerCase();
+    const exists = await query<DbUser>("SELECT id FROM users WHERE email = $1", [normalised]);
+    if (exists.rowCount && exists.rows.length > 0) {
+      return c.json({ error: "Email already exists" }, 409);
+    }
+
+    const id = crypto.randomUUID?.() ?? `cust_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const passwordHash = await hashPassword(password);
+
+    const insert = await query<DbUser>(
+      `INSERT INTO users (id, email, name, password_hash, role, age, phone, created_at)
+       VALUES ($1, $2, $3, $4, 'customer', $5, $6, now())
+       RETURNING id, email, name, age, role, created_at, email_verified`,
+      [id, normalised, name.trim(), passwordHash, age ?? null, phone ?? null],
+    );
+    const user = insert.rows[0];
+    if (!user) return c.json({ error: "Failed to create account — please try again" }, 500);
+
+    const accessToken = await signAccessToken(user.id, user.email, "customer");
+    const refreshToken = await signRefreshToken(user.id, "customer");
+    await query("INSERT INTO refresh_tokens (token, user_id) VALUES ($1, $2)", [refreshToken, user.id]);
+
+    // Create email verification token valid for 24h
+    const verificationToken = generateVerificationToken();
+    try {
+      await query(
+        "INSERT INTO email_verifications (token, user_id, expires_at) VALUES ($1, $2, now() + interval '24 hours')",
+        [verificationToken, user.id],
+      );
+    } catch (verifyErr: any) {
+      // Non-fatal: user can still log in; email verification can be resent
+      console.error("[register] email_verifications insert failed:", verifyErr?.message ?? verifyErr);
+    }
+
+    let mailPreviewUrl: string | undefined;
+    try {
+      const mail = await sendVerificationEmail(user.email, verificationToken);
+      mailPreviewUrl = (mail as any).previewUrl;
+    } catch (err: any) {
+      console.error("[register] Failed to send verification email:", err?.message ?? err);
+    }
+
+    return c.json({
+      message: "Customer registered successfully",
+      user: { id: user.id, email: user.email, name: user.name, age: user.age, role: "customer", createdAt: user.created_at, emailVerified: user.email_verified ?? false },
+      token: accessToken,
+      refreshToken,
+      verificationToken,
+      mailPreviewUrl,
+    }, 201);
+  } catch (err: any) {
+    console.error("[register] Unhandled error:", err?.message ?? err);
+    return c.json({ error: err?.message ?? "Registration failed — please try again" }, 500);
+  }
 });
 
 // Provider sign-in / sign-up (auto-creates verified customer accounts)

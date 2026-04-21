@@ -291,7 +291,7 @@ function handleAuthError(error: ApiError): Error {
       case 403: return new Error(data?.error ?? "Access denied");
       case 409: return new Error("Email already exists");
       case 500: return new Error("Server error. Please try again later.");
-      default:  return new Error(data?.error ?? "Authentication failed");
+      default:  return new Error(data?.error ?? `Server error (HTTP ${status}) — please try again`);
     }
   } else if (error.request) {
     return new Error("Network error. Please check your connection.");
